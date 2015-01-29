@@ -1,0 +1,103 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import os
+import sys
+import mm
+
+global env
+global libs_dir
+global install_dir
+global share_libs
+global static_libs
+global dict_targets
+
+
+def get_env_list(env_name):
+    value = _mm.mm_config.get_value(env_name, None)
+    if value is None:
+        return None
+    return value.split(',')
+
+
+def get_env(env_name):
+    return _mm.mm_config.get_value(env_name, None)
+
+
+def get_module_name(module_node):
+    name = get_env(module_node + '.name')
+    if name is None:
+        name = module_node.split('.')[-1]
+    return name
+
+
+def build_module(module_node, build_dir):
+    name = get_module_name(module_node)
+    sources = get_env_list(module_node + '.sources')
+    if sources is not None and sources[0] == 'none':
+        return
+    src_dir = get_env(module_node + '.src_dir')
+    if src_dir is None:
+        src_dir = "src"
+    if sources is None:
+        # print(env.get('CPPSUFFIXES'))
+        sources = mm.find_source(env.get('CPPSUFFIXES'), src_dir)
+        # print(sources)
+    sources_count = len(sources)
+    if sources_count == 0:
+        return
+    for index in xrange(sources_count):
+        sources[index] = os.path.join(build_dir, src_dir, sources[index])
+    print sources
+    # print("node = %s name = %s source = %s" % (module_node, name, source))
+    inc_dir = get_env_list(module_node + ".inc_dir")
+    if inc_dir is None:
+        inc_dir = "include"
+    lib_name = os.path.join(libs_dir, name)
+    sharelib = env.SharedLibrary(target=lib_name, source=sources, CPPPATH=inc_dir)
+    staticlib = env.StaticLibrary(target=lib_name, source=sources, CPPPATH=inc_dir)
+    share_libs.append(sharelib)
+    static_libs.append(staticlib)
+    dict_targets[name] = [staticlib, sharelib]
+
+
+_mm = mm.MM()
+share_libs = []
+static_libs = []
+dict_targets = {}
+
+# build_dir = ARGUMENTS.get('build_dir', ".")
+
+module_name = get_env("module.name")
+libs_dir = get_env("env.libs_dir")
+install_dir = get_env("module.install_dir")
+build_dir = os.path.join(get_env("env.build_dir"), module_name)
+if build_dir is not None:
+    VariantDir(build_dir, ".", duplicate=0)
+
+env = Environment()
+env['CCCOMSTR'] = "Compiling $TARGET"
+env['CXXCOMSTR'] = "Compiling $TARGET"
+env['LINKCOMSTR'] = "Linking $TARGET"
+Export('env')
+
+submodules = get_env_list('module.sub')
+if submodules is not None:
+    for submodule in submodules:
+        node = 'module.sub.' + submodule
+        build_module(node, build_dir)
+        depend = get_env(node + '.depend')
+        if depend is not None:
+            print("---Depend = " + depend)
+            env.Depends(dict_targets[submodule], dict_targets[depend])
+
+build_module('module', build_dir)
+
+if install_dir is not None:
+    env.Install(install_dir, static_libs)
+    env.Install(install_dir, share_libs)
+    env.Alias('install', install_dir)
+
+env.Default(share_libs)
+env.Default(static_libs)
+
