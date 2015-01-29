@@ -24,9 +24,9 @@ class MMConfig:
                 # print('%s.%s = %s' % (section, i, v))
 
         for k in self.dict_values.keys():
-            self.get_map(k.split('.'), self.dict_values[k], self.dict_configs)
+            self.__set_value(k.split('.'), self.dict_values[k], self.dict_configs)
 
-    def get_map(self, name, value, map_config):
+    def __set_value(self, name, value, map_config):
         # print(name, value, map_config)
         name_len = len(name)
         if name_len == 0:
@@ -37,13 +37,15 @@ class MMConfig:
         if name_len == 1:
             map_config[key][''] = value
         else:
-            self.get_map(name[1:], value, map_config[key])
+            self.__set_value(name[1:], value, map_config[key])
 
     def __get_dict_node(self, node):
         split_strs = node.split('.')
         dict_node = self.dict_configs
         for key in split_strs:
-            if key == "" or not dict_node.has_key(key):
+            if key == "":
+                break
+            if not dict_node.has_key(key):
                 return None
             dict_node = dict_node[key]
         return dict_node
@@ -51,7 +53,9 @@ class MMConfig:
     def get_items(self, node):
         items = []
         dict_node = self.__get_dict_node(node)
-        for key in dict_node:
+        if dict_node is None:
+            return items
+        for key in dict_node.keys():
             if key != "":
                 items.append(key)
         return items
@@ -60,15 +64,44 @@ class MMConfig:
         dict_node = self.__get_dict_node(node)
         if dict_node is None:
             return defvalue
+        if not dict_node.has_key(""):
+            print("%s no value" % node)
+            return defvalue
         return dict_node[""]
 
     def show(self, node=""):
         dict_node = self.__get_dict_node(node)
-        self.__show("", dict_node)
+        if dict_node is not None:
+            self.__show("", dict_node)
 
     def show_values(self):
         for k in sorted(self.dict_values.keys()):
             print('%s = %s' % (k, self.dict_values[k]))
+
+    def convert_scons(self, node=""):
+        scons_lines = []
+        scons_lines.append("Import('env')\n")
+        node_len = len(node)
+
+        def append_to_list(key, value):
+            env = key.replace('.', '_')
+            scons_lines.append("env.Append(%s= '%s')\n" % (env, value))
+
+        for (key, value) in sorted(self.dict_values.items()):
+            if node_len == 0:
+                append_to_list(key, value)
+                continue
+            key_len = len(key)
+            if key_len < node_len:
+                continue
+            if key_len == node_len:
+                if key != node:
+                    continue
+                append_to_list(key, value)
+            if key[:node_len] == node + '.':
+                append_to_list(key, value)
+        return scons_lines
+
 
     def __show(self, base, map_data):
         data = map_data.items()
@@ -84,13 +117,20 @@ class MMConfig:
                 else:
                     self.__show(base + '    ', v)
 
+    def set_value(self, node, value):
+        self.__set_value(node.split('.'), value, self.dict_configs)
+
 
 if __name__ == "__main__":
     mm = MMConfig()
-    mm.read_config("mm_1.ini")
-    mm.read_config("mm_2.ini")
+    # mm.read_config("mm_1.ini")
+    # mm.read_config("mm_2.ini")
+    mm.read_config("mm.cfg")
+    mm.set_value("set.s", 1)
+    mm.set_value("set.r", 2)
     mm.show()
-    mm.show("module.depend")
-    print(mm.get_items("module.depend"))
-    print(mm.get_value("module.depend.test1.config"))
-    print(mm.get_value("module.depend.test1.max_version"))
+    # mm.show_values()
+    # mm.show("module.depend")
+    # print(mm.get_items("module.depend"))
+    # print(mm.get_value("module.depend.test1.config"))
+    # print(mm.get_value("module.depend.test1.max_version"))
