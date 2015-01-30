@@ -9,6 +9,7 @@ import mmconfig
 
 class MM:
     def __init__(self):
+        self.__depend_stack = []
         self.mm_config_name = r"mm.cfg"
         self.mm_config = mmconfig.MMConfig()
         self.mm_depends = []
@@ -88,7 +89,8 @@ class MM:
 
     def __get_depends(self, module_name):
         mm_depends = {}
-        if module_name == self.module_name:
+        self.__depend_stack.append(module_name)
+        if module_name in self.__depend_stack:
             print("depend come back to self")
             return mm_depends
         mm_config = mmconfig.MMConfig()
@@ -107,6 +109,7 @@ class MM:
             if depend != "":
                 # print("depend -> %s" % depend)
                 mm_depends[depend] = self.__get_depends(depend)
+                self.__depend_stack.pop()
         return mm_depends
 
     def __add_cmd_param(self, param, add_param):
