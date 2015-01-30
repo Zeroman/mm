@@ -1,0 +1,2 @@
+1. 实现app，eg: com.a.b.c
+2. 实现repo多级目录，eg: com.a.b.c
