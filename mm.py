@@ -3,7 +3,7 @@
 
 import os
 import sys
-import urllib
+
 import mmconfig
 
 
@@ -13,8 +13,12 @@ class MM:
         self.mm_config_name = r"mm.cfg"
         self.mm_config = mmconfig.MMConfig()
         self.mm_depends = []
-        self.mm_all_depends = {}
+        self.mm_all_depends_list = []
+        self.mm_all_depends_dict = {}
         self.repo_dirs = []
+        self.module_path_dict = {}
+        self.module_incdir_dict = {}
+        self.depend_config_dict = {}
 
         self.mm_path = os.path.dirname(__file__)
         self.scons_struct = os.path.join(self.mm_path, "sconstruct")
@@ -25,17 +29,6 @@ class MM:
 
         self.mm_config_path = []
         self.__init_config()
-        self.build_dir = self.mm_config.get_value("env.build_dir", os.path.normpath(self.module_path))
-        self.__mkdir(self.build_dir)
-
-        repos = self.mm_config.get_items("repo.local")
-        for repo in repos:
-            dir = self.mm_config.get_value("repo.local." + repo + ".dir")
-            print("repo %s dir is %s" % (repo, dir))
-            assert os.path.isdir(dir)
-            self.repo_dirs.append(dir)
-
-        self.mm_depends = self.mm_config.get_value("module.depend", "").split(',')
 
         self.scons_path = self.mm_config.get_value("scons.path", self.__find_file("scons"))
         self.scons_param = self.mm_config.get_value("scons.param")
@@ -54,20 +47,65 @@ class MM:
                 print("mm  " + config_file)
                 self.mm_config.read_config(config_file)
 
+        self.build_dir = self.mm_config.get_value("env.build_dir", os.path.normpath(self.module_path))
+        self.__mkdir(self.build_dir)
+
+        repos = self.mm_config.get_items("repo.local")
+        for repo in repos:
+            dir = self.mm_config.get_value("repo.local." + repo + ".dir")
+            print("repo %s dir is %s" % (repo, dir))
+            assert os.path.isdir(dir)
+            self.repo_dirs.append(dir)
+
+        self.mm_depends = self.mm_config.get_value("module.depend", "").split(',')
+        self.__proc_depends()
+
+        for depend in self.mm_all_depends_list:
+            mm_config = self.get_module_config(depend)
+            inc_dir = mm_config.get_value("module.inc_dir", "include")
+            inc_dir = os.path.join(self.get_module_path(depend), inc_dir)
+            self.mm_config.set_value("module.depend." + depend + '.inc_dir', inc_dir)
+
     def get_module_path(self, module_name):
+        if self.module_path_dict.has_key(module_name):
+            return self.module_path_dict[module_name]
         for dir in self.repo_dirs:
             path = os.path.join(dir, module_name)
             if os.path.isdir(path):
+                self.module_path_dict[module_name] = path
                 return path
         return None
 
-    def get_depends(self):
+    def get_module_config(self, module_name):
+        if self.depend_config_dict.has_key(module_name):
+            return self.depend_config_dict[module_name]
+        mm_config = mmconfig.MMConfig()
+
+        module_path = self.get_module_path(module_name)
+        if module_path is None:
+            print("can't find module " + module_name)
+            return None
+        # print("find module_path =" + module_path)
+        mm_config.read_config(os.path.join(module_path, self.mm_config_name))
+        self.depend_config_dict[module_name] = mm_config
+        return mm_config
+
+    def __proc_depends(self):
         dict_depends = {}
         for depend in self.mm_depends:
             # print("depend -> %s" % depend)
             dict_depends[depend] = self.__get_depends(depend)
-        self.mm_all_depends[self.module_name] = dict_depends
-        return self.mm_all_depends
+        self.mm_all_depends_dict[self.module_name] = dict_depends
+        self.__depends_dict_to_list(self.mm_all_depends_dict, self.mm_all_depends_list)
+
+    def __depends_dict_to_list(self, depends_dict, depends_list):
+        data = depends_dict.items()
+        while data:
+            k, v = data.pop(0)
+            if k in depends_list:
+                depends_list.remove(k)
+            depends_list.append(k)
+            self.__depends_dict_to_list(v, depends_list)
 
     def __show_map(self, base, map_data):
         data = map_data.items()
@@ -90,16 +128,10 @@ class MM:
     def __get_depends(self, module_name):
         mm_depends = {}
         if module_name in self.__depend_stack:
-            print("depend come back to self")
+            print("Error : depend come back to self")
             return mm_depends
         self.__depend_stack.append(module_name)
-        mm_config = mmconfig.MMConfig()
-        module_path = self.get_module_path(module_name)
-        if module_path is None:
-            # print("can't find module " + module_name)
-            return mm_depends
-        # print("find module_path =" + module_path)
-        mm_config.read_config(os.path.join(module_path, self.mm_config_name))
+        mm_config = self.get_module_config(module_name)
         depends_str = mm_config.get_value("module.depend", None)
         if depends_str is None:
             print("%s -> none " % module_name)
@@ -184,9 +216,14 @@ class MM:
         os.system(self.scons_path + scons_param)
 
     def show_depends(self):
-        depends_map = self.get_depends()
-        if depends_map is not None:
-            self.__show_map("", depends_map)
+        print("-" * 50)
+        print(" -> ".join(self.mm_all_depends_list))
+        print("-" * 50)
+        self.__show_map("", self.mm_all_depends_dict)
+        print("-" * 50)
+        for k, v in self.module_path_dict.items():
+            print("%10s : %s" % (k, v))
+        print("-" * 50)
 
 
 def find_source(suffixlist, path='.', recursive=False):
@@ -221,8 +258,8 @@ if __name__ == "__main__":
     if "clean" in sys.argv:
         mm.clean_module()
     if "show" in sys.argv:
-        mm.show_env()
         mm.show_depends()
+        mm.show_env()
         sys.exit(0)
 
     print("")
