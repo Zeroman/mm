@@ -4,6 +4,7 @@
 import os
 import sys
 import mm
+import platform
 
 global env
 global libs_dir
@@ -43,11 +44,15 @@ def build_module(module_node, build_dir):
         # print(env.get('CPPSUFFIXES'))
         sources = mm.find_source(env.get('CPPSUFFIXES'), src_dir)
         # print(sources)
+    else:
+        sources_count = len(sources)
+        for index in xrange(sources_count):
+            sources[index] = os.path.join(src_dir, sources[index])
     sources_count = len(sources)
     if sources_count == 0:
         return
     for index in xrange(sources_count):
-        sources[index] = os.path.join(build_dir, src_dir, sources[index])
+        sources[index] = os.path.join(build_dir, sources[index])
     print sources
     # print("node = %s name = %s source = %s" % (module_node, name, source))
     inc_dir = get_env_list(module_node + ".inc_dir")
@@ -61,12 +66,16 @@ def build_module(module_node, build_dir):
     dict_targets[name] = [staticlib, sharelib]
 
 
+env = Environment()
+env['CCCOMSTR'] = "Compiling $TARGET"
+env['CXXCOMSTR'] = "Compiling $TARGET"
+env['LINKCOMSTR'] = "Linking $TARGET"
+arch = ARGUMENTS.get('arch', "")
+
 _mm = mm.MM()
 share_libs = []
 static_libs = []
 dict_targets = {}
-
-# build_dir = ARGUMENTS.get('build_dir', ".")
 
 module_name = get_env("module.name")
 libs_dir = get_env("env.libs_dir")
@@ -75,11 +84,30 @@ build_dir = os.path.join(get_env("env.build_dir"), module_name)
 if build_dir is not None:
     VariantDir(build_dir, ".", duplicate=0)
 
-env = Environment()
-env['CCCOMSTR'] = "Compiling $TARGET"
-env['CXXCOMSTR'] = "Compiling $TARGET"
-env['LINKCOMSTR'] = "Linking $TARGET"
-Export('env')
+if arch is not "":
+    arch_node = 'arch.' + arch
+    env_cc = get_env(arch_node + ".CC")
+    print(arch_node + ".CC" + "=")
+    if env_cc is not None:
+        env['CC'] = env_cc
+    env_cxx = get_env(arch_node + ".CXX")
+    if env_cxx is not None:
+        env['CXX'] = env_cxx
+    env_ccflags = get_env(arch_node + ".CCFLAGS")
+    if env_ccflags is not None:
+        env['CCFLAGS'] = env_ccflags
+    env_cxxflags = get_env(arch_node + ".CCFLAGS")
+    if env_cxxflags is not None:
+        env['CXXFLAGS'] = env_cxxflags
+else:
+    arch = platform.machine()
+
+print('arch = ' + arch)
+libs_dir = os.path.join(libs_dir, arch)
+
+
+# Export('env')
+
 
 submodules = get_env_list('module.sub')
 if submodules is not None:

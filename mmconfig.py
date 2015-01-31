@@ -4,8 +4,15 @@
 import os
 import sys
 import pprint
+import ConfigParser
 
-from ConfigParser import ConfigParser
+
+class MMConfigFile(ConfigParser.ConfigParser):
+    def __init__(self, defaults=None):
+        ConfigParser.ConfigParser.__init__(self, defaults=None)
+
+    def optionxform(self, optionstr):
+        return optionstr
 
 
 class MMConfig:
@@ -14,7 +21,7 @@ class MMConfig:
         self.dict_values = {}
 
     def read_config(self, filePath):
-        config = ConfigParser()
+        config = MMConfigFile()
         config.read(filePath)
         sections = config.sections()
         for section in sections:

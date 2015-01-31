@@ -89,10 +89,10 @@ class MM:
 
     def __get_depends(self, module_name):
         mm_depends = {}
-        self.__depend_stack.append(module_name)
         if module_name in self.__depend_stack:
             print("depend come back to self")
             return mm_depends
+        self.__depend_stack.append(module_name)
         mm_config = mmconfig.MMConfig()
         module_path = self.get_module_path(module_name)
         if module_path is None:
@@ -139,8 +139,10 @@ class MM:
         script = file(os.path.join(self.build_dir, "sconscript"), "w")
         script.writelines(self.mm_config.convert_scons())
 
-    def build_module(self, path):
-        os.system(self.scons_path + self.scons_param + " --random --tree=all")
+    def build_module(self, path, argv=""):
+        # os.system(self.scons_path + self.scons_param + " --random --tree=all")
+        scons_param = self.__add_cmd_param(self.scons_param, argv)
+        os.system(self.scons_path + scons_param)
 
     def install(self):
         scons_param = self.scons_param
@@ -218,14 +220,13 @@ if __name__ == "__main__":
         sys.exit(0)
     if "clean" in sys.argv:
         mm.clean_module()
-        sys.exit(0)
     if "show" in sys.argv:
         mm.show_env()
         mm.show_depends()
+        sys.exit(0)
 
     print("")
-    print("")
-    print("*" * 20)
-    # mm.build_module(".")
+    print("-" * 30)
+    mm.build_module(".", " ".join(sys.argv[1:]))
 
 
