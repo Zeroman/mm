@@ -7,7 +7,7 @@ import platform
 import mm
 
 
-class GLOBAL_VAR:
+class MMBuilder:
     def __init__(self, env, arch):
         self.__mm = mm.MM()
         self.env = env
@@ -71,13 +71,14 @@ class GLOBAL_VAR:
 
     def get_node_sources(self, node):
         name = self.get_module_name(node)
-        sources = vars.get_env_list(node + '.sources', [])
+        sources = self.get_env_list(node + '.sources', [])
         if 'none' in sources:
             return []
         src_dir = self.get_env(node + '.src_dir')
         if src_dir is None:
             src_dir = "src"
-        print(sources)
+        if not os.path.isdir(src_dir):
+            return []
         if 'all' in sources:
             sources = mm.find_source(self.get_env_list('env.src_suffixes'), src_dir, recursive=True)
         elif len(sources) is 0:
@@ -92,7 +93,7 @@ class GLOBAL_VAR:
         return sources
 
     def get_node_inc_dir(self, node):
-        inc_dir = vars.get_env_list(node + ".inc_dir")
+        inc_dir = self.get_env_list(node + ".inc_dir")
         if inc_dir is None:
             inc_dir = []
             if os.path.isdir('include'):
@@ -100,7 +101,7 @@ class GLOBAL_VAR:
         return inc_dir
 
     def get_node_src_dir(self, node):
-        dir = vars.get_env_list(node + ".src_dir")
+        dir = self.get_env_list(node + ".src_dir")
         if dir is None:
             if os.path.isdir('src'):
                 dir = "src"
@@ -116,7 +117,7 @@ class GLOBAL_VAR:
             list.append(item)
 
     def build_module_node(self, module_node):
-        sources = vars.get_node_sources(module_node)
+        sources = self.get_node_sources(module_node)
         sources_count = len(sources)
         if sources_count == 0:
             return
@@ -197,10 +198,10 @@ env['LINKCOMSTR'] = "Linking $TARGET"
 # Export('env')
 arch = ARGUMENTS.get('arch', "")
 
-vars = GLOBAL_VAR(env, arch)
-vars.build_all()
-vars.default_target()
-vars.install()
-vars.packall()
+builder = MMBuilder(env, arch)
+builder.build_all()
+builder.default_target()
+builder.install()
+builder.packall()
 
 

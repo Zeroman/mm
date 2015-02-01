@@ -1,4 +1,6 @@
-- 实现app，eg: com.a.b.c
+- 支持lib目录拷贝
+- 实现app
+- example unittest preftest functest
 - 实现repo多级目录，eg: com.a.b.c
 - 支持不同体系结构
 - 支持不同OS

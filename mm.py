@@ -20,7 +20,7 @@ class MM:
         self.module_incdir_dict = {}
         self.depend_config_dict = {}
 
-        self.mm_path = os.path.realpath(os.path.dirname(__file__))
+        self.mm_path = os.path.dirname(os.path.realpath(__file__))
         self.scons_script = os.path.join(self.mm_path, "sconstruct")
 
         self.module_path = os.path.normpath(os.getcwd())
@@ -192,19 +192,23 @@ class MM:
         script.writelines(self.mm_config.convert_scons())
 
     def build_module(self, path, argv=""):
-        print("#" * 20 + "Start build %s" % os.path.basename(path) + "#" * 20)
+        print("+" * 20 + "Start build %s" % os.path.basename(path) + "+" * 20)
         # os.system(self.scons_path + self.scons_param + " --random --tree=all")
         scons_param = self.__add_cmd_param(self.scons_param, "-f " + self.scons_script)
         scons_param = self.__add_cmd_param(scons_param, argv)
         os.chdir(path)
-        os.system(self.scons_path + scons_param)
-        print("#" * 20 + "End build %s" % os.path.basename(path) + "#" * 20)
+        ret = os.system(self.scons_path + scons_param)
+        # print (" ret = %d" % ret)
+        print("-" * 20 + "End build %s" % os.path.basename(path) + "-" * 20)
         print("")
+        return ret
         # print(scons_param)
 
     def build_modules(self, modules, argv=""):
         for module in modules:
-            mm.build_module(mm.get_module_path(module), argv)
+            ret = mm.build_module(mm.get_module_path(module), argv)
+            if ret != 0:
+                break
 
     def build_depends(self, argv=""):
         self.build_modules(self.mm_all_depends_list, argv)
@@ -283,7 +287,18 @@ def find_source(suffixlist, path='.', recursive=False):
     return sources
 
 
+
 if __name__ == "__main__":
+    map_argv = {}
+    map_argv["-p"] = "packing"
+    map_argv["p"] = "packing"
+    map_argv["-P"] = "pack"
+    map_argv["P"] = "pack"
+    map_argv["b"] = "build"
+    map_argv["-b"] = "build"
+    map_argv["B"] = "build_depends"
+    map_argv["-B"] = "build_depends"
+
     mm = MM()
     if "create" in sys.argv:
         mm.create_templete()
@@ -295,8 +310,11 @@ if __name__ == "__main__":
         mm.show_depends()
         mm.show_env()
         sys.exit(0)
-    if "pack" in sys.argv:
-        sys.exit(0)
+
+    for param in map_argv.keys():
+        if param in sys.argv:
+            sys.argv.remove(param)
+            sys.argv.append(map_argv[param])
 
     if "build_depends" in sys.argv:
         sys.argv.remove("build_depends")
