@@ -20,10 +20,10 @@ class MM:
         self.module_incdir_dict = {}
         self.depend_config_dict = {}
 
-        self.mm_path = os.path.dirname(__file__)
-        self.scons_struct = os.path.join(self.mm_path, "sconstruct")
+        self.mm_path = os.path.realpath(os.path.dirname(__file__))
+        self.scons_script = os.path.join(self.mm_path, "sconstruct")
 
-        self.module_path = os.getcwd()
+        self.module_path = os.path.normpath(os.getcwd())
         self.module_name = self.mm_config.get_value("module.name", os.path.basename(self.module_path))
         self.mm_config.set_value("module.name", self.module_name)
 
@@ -32,8 +32,9 @@ class MM:
 
         self.scons_path = self.mm_config.get_value("scons.path", self.__find_file("scons"))
         self.scons_param = self.mm_config.get_value("scons.param")
-        self.scons_param = self.__add_cmd_param(self.scons_param, "-f " + self.scons_struct)
-        self.scons_param = self.__add_cmd_param(self.scons_param, "-Q ")
+        site_dir = os.path.join(self.mm_path, "site")
+        self.scons_param = self.__add_cmd_param(self.scons_param, "--site-dir=" + site_dir)
+        # self.scons_param = self.__add_cmd_param(self.scons_param, "-Q ")
 
 
     def __init_config(self):
@@ -44,35 +45,52 @@ class MM:
         for path in self.mm_config_path:
             config_file = os.path.join(path, self.mm_config_name)
             if os.path.exists(config_file) and os.path.isfile(config_file):
-                print("mm  " + config_file)
+                # print("mm  " + config_file)
                 self.mm_config.read_config(config_file)
 
-        self.build_dir = self.mm_config.get_value("env.build_dir", os.path.normpath(self.module_path))
+        self.build_dir = self.mm_config.get_value("env.build_dir", self.module_path)
         self.__mkdir(self.build_dir)
 
         repos = self.mm_config.get_items("repo.local")
         for repo in repos:
             dir = self.mm_config.get_value("repo.local." + repo + ".dir")
-            print("repo %s dir is %s" % (repo, dir))
             assert os.path.isdir(dir)
             self.repo_dirs.append(dir)
 
+        mm_libs_path = os.getenv('MM_LIBS_PATH')
+        if mm_libs_path is not None:
+            self.mm_config.set_value("env.libs_dir", mm_libs_path)
+
+        mm_repo_path = os.getenv('MM_REPO_PATH')
+        print(mm_repo_path)
+        if mm_repo_path is not None:
+            self.mm_config.set_value("repo.local.env.dir", mm_repo_path)
+            assert os.path.isdir(mm_repo_path)
+            self.repo_dirs.append(mm_repo_path)
+
         self.mm_depends = self.mm_config.get_value("module.depend", "").split(',')
         self.__proc_depends()
-
-        for depend in self.mm_all_depends_list:
-            mm_config = self.get_module_config(depend)
+        for module_name in self.mm_all_depends_list:
+            mm_config = self.get_module_config(module_name)
             inc_dir = mm_config.get_value("module.inc_dir", "include")
-            inc_dir = os.path.join(self.get_module_path(depend), inc_dir)
-            self.mm_config.set_value("module.depend." + depend + '.inc_dir', inc_dir)
+            inc_dir = os.path.join(self.get_module_path(module_name), inc_dir)
+            self.mm_config.set_value("module.depend." + module_name + '.inc_dir', inc_dir)
+        self.mm_config.set_value("module.depend", ",".join(self.mm_all_depends_list))
+
+    def __submodule_name(self, module_name):
+        temp_list = module_name.split(':')
+        if len(temp_list) <= 1:
+            return None
+        return temp_list[1]
 
     def get_module_path(self, module_name):
-        if self.module_path_dict.has_key(module_name):
-            return self.module_path_dict[module_name]
+        name = module_name.split(':')[0]
+        if self.module_path_dict.has_key(name):
+            return self.module_path_dict[name]
         for dir in self.repo_dirs:
-            path = os.path.join(dir, module_name)
+            path = os.path.join(dir, name)
             if os.path.isdir(path):
-                self.module_path_dict[module_name] = path
+                self.module_path_dict[name] = path
                 return path
         return None
 
@@ -102,9 +120,10 @@ class MM:
         data = depends_dict.items()
         while data:
             k, v = data.pop(0)
-            if k in depends_list:
-                depends_list.remove(k)
-            depends_list.append(k)
+            if k is not self.module_name and k is not "":
+                if k in depends_list:
+                    depends_list.remove(k)
+                depends_list.append(k)
             self.__depends_dict_to_list(v, depends_list)
 
     def __show_map(self, base, map_data):
@@ -128,20 +147,21 @@ class MM:
     def __get_depends(self, module_name):
         mm_depends = {}
         if module_name in self.__depend_stack:
-            print("Error : depend come back to self")
+            print("Error : depend come back to self: %s" % (module_name))
             return mm_depends
         self.__depend_stack.append(module_name)
         mm_config = self.get_module_config(module_name)
         depends_str = mm_config.get_value("module.depend", None)
         if depends_str is None:
-            print("%s -> none " % module_name)
+            # print("%s -> none " % module_name)
+            self.__depend_stack.pop()
             return mm_depends
         depends = depends_str.split(',')
         for depend in depends:
             if depend != "":
                 # print("depend -> %s" % depend)
                 mm_depends[depend] = self.__get_depends(depend)
-                self.__depend_stack.pop()
+        self.__depend_stack.pop()
         return mm_depends
 
     def __add_cmd_param(self, param, add_param):
@@ -172,9 +192,22 @@ class MM:
         script.writelines(self.mm_config.convert_scons())
 
     def build_module(self, path, argv=""):
+        print("#" * 20 + "Start build %s" % os.path.basename(path) + "#" * 20)
         # os.system(self.scons_path + self.scons_param + " --random --tree=all")
-        scons_param = self.__add_cmd_param(self.scons_param, argv)
+        scons_param = self.__add_cmd_param(self.scons_param, "-f " + self.scons_script)
+        scons_param = self.__add_cmd_param(scons_param, argv)
+        os.chdir(path)
         os.system(self.scons_path + scons_param)
+        print("#" * 20 + "End build %s" % os.path.basename(path) + "#" * 20)
+        print("")
+        # print(scons_param)
+
+    def build_modules(self, modules, argv=""):
+        for module in modules:
+            mm.build_module(mm.get_module_path(module), argv)
+
+    def build_depends(self, argv=""):
+        self.build_modules(self.mm_all_depends_list, argv)
 
     def install(self):
         scons_param = self.scons_param
@@ -210,10 +243,6 @@ class MM:
     def show_env(self):
         self.mm_config.show()
 
-    def clean_module(self):
-        scons_param = self.__add_cmd_param(self.scons_param, "-c")
-        print(self.__add_cmd_param(self.scons_path, self.scons_param))
-        os.system(self.scons_path + scons_param)
 
     def show_depends(self):
         print("-" * 50)
@@ -227,6 +256,10 @@ class MM:
 
 
 def find_source(suffixlist, path='.', recursive=False):
+    """
+
+    :rtype : list
+    """
     sources = []
 
     def find_func(arg, dirname, names):
@@ -255,15 +288,20 @@ if __name__ == "__main__":
     if "create" in sys.argv:
         mm.create_templete()
         sys.exit(0)
-    if "clean" in sys.argv:
-        mm.clean_module()
     if "show" in sys.argv:
+        print("mm path is " + mm.mm_path)
+        for repo in mm.repo_dirs:
+            print("repo %-10s : [ %s ]" % (repo, dir))
         mm.show_depends()
         mm.show_env()
         sys.exit(0)
+    if "pack" in sys.argv:
+        sys.exit(0)
 
-    print("")
-    print("-" * 30)
-    mm.build_module(".", " ".join(sys.argv[1:]))
+    if "build_depends" in sys.argv:
+        sys.argv.remove("build_depends")
+        mm.build_depends(" ".join(sys.argv[1:]))
+
+    mm.build_module(mm.module_path, " ".join(sys.argv[1:]))
 
 
