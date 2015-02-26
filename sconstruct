@@ -2,23 +2,31 @@
 # -*- coding: utf-8 -*-
 
 import os
-import platform
 
-import mm
+import mmenv
+import mmrepo
+import mmcommon
+import mmmodule
+import mmconfig
 
 
 class MMBuilder:
-    def __init__(self, env, arch):
-        self.__mm = mm.MM()
+    def __init__(self, env, config_path):
         self.env = env
-        self.arch = self.__init_arch(arch)
+        self.__config = mmconfig.MMConfig()
+        self.__config.read_config(config_path)
+
+        self.arch = self.get_env("module.arch")
+
+        self.__init_arch()
         self.module_name = self.get_env("module.name")
         self.dep_modules = self.get_env_list('module.depend', [])
         self.libs_dir = self.get_env("env.libs_dir")
         assert self.libs_dir is not None
-        self.libs_dir = os.path.join(self.libs_dir, arch)
+        self.libs_dir = os.path.join(self.libs_dir, self.arch)
         self.list_dep_inc = self.get_depend_module_dir()
-        self.build_dir = os.path.join(self.get_env("env.build_dir"), self.module_name, arch)
+        self.build_dir = os.path.join(self.get_env("env.build_dir"), self.module_name, self.arch)
+        self.env.SConsignFile(os.path.join(self.build_dir, ".sconsign.dblite"))
         if self.build_dir is not None:
             VariantDir(self.build_dir, ".", duplicate=0)
         self.share_libs = []
@@ -26,29 +34,42 @@ class MMBuilder:
         self.dict_targets = {}
         self.install_dir = self.get_env("module.install_dir")
 
-        ccflags = self.get_env("module.CCFLAGS")
-        self.env.Append(CCFLAGS=ccflags)
-        cxxflags = self.get_env("module.CXXFLAGS")
-        self.env.Append(CXXFLAGS=cxxflags)
+        ccflags = self.get_env("module." + self.arch + ".CCFLAGS")
+        if ccflags is not None:
+            self.env.Append(CCFLAGS=ccflags)
+        cxxflags = self.get_env("module." + self.arch + ".CXXFLAGS")
+        if cxxflags is not None:
+            self.env.Append(CXXFLAGS=cxxflags)
+        linkflags = self.get_env("module." + self.arch + ".LINKFLAGS")
+        if linkflags is not None:
+            self.env.Append(LINKFLAGS=cxxflags)
+        libs = self.get_env_list("module." + self.arch + ".LIBS")
+        if libs is not None:
+            self.env.Append(LIBS=libs)
+            # print("LIBS = " + env.Dump('LIBS'))
+
+        self.local_libs = []
+        local_libs_dir = os.path.join("lib", self.arch)
+        if os.path.isdir(local_libs_dir):
+            self.local_libs = mm.find_source([], local_libs_dir)
+
+        self.depend_lib_files = self.__init_depend_lib_files()
 
     def install(self):
+        target = []
         if self.install_dir is not None:
-            env.Install(self.install_dir, self.static_libs)
-            env.Install(self.install_dir, self.share_libs)
-            env.Alias('install', self.install_dir)
-
-    def default_target(self):
-        self.env.Default(self.share_libs)
-        self.env.Default(self.static_libs)
+            target.append(self.env.Install(self.install_dir, self.static_libs))
+            target.append(self.env.Install(self.install_dir, self.share_libs))
+        return target
 
     def get_env_list(self, env_name, default=None):
-        value = self.__mm.mm_config.get_value(env_name, None)
-        if value is None:
+        value = self.__config.get_value(env_name, None)
+        if value is None or value is "":
             return default
         return value.split(',')
 
     def get_env(self, env_name):
-        return self.__mm.mm_config.get_value(env_name, None)
+        return self.__config.get_value(env_name, None)
 
 
     def get_module_name(self, module_node):
@@ -60,6 +81,7 @@ class MMBuilder:
 
     def get_depend_module_dir(self):
         inc_dir = []
+        # print self.dep_modules
         for submodule in self.dep_modules:
             node = 'module.depend.' + submodule
             dirs = self.get_env_list(node + '.inc_dir')
@@ -132,13 +154,14 @@ class MMBuilder:
         self.list_append(list_inc, self.get_env_list(module_node + ".build.inc_dir"))
         name = self.get_module_name(module_node)
         lib_name = os.path.join(self.libs_dir, name)
-        sharelib = env.SharedLibrary(target=lib_name, source=sources, CPPPATH=list_inc)
-        staticlib = env.StaticLibrary(target=lib_name, source=sources, CPPPATH=list_inc)
+        sharelib = self.env.SharedLibrary(target=lib_name, source=sources, CPPPATH=list_inc)
+        staticlib = self.env.StaticLibrary(target=lib_name, source=sources, CPPPATH=list_inc)
         self.share_libs.append(sharelib)
         self.static_libs.append(staticlib)
         self.dict_targets[name] = [staticlib, sharelib]
 
-    def build_all(self):
+    def build_module(self):
+        target = []
         submodules = self.get_env_list('module.sub')
         if submodules is not None:
             for submodule in submodules:
@@ -149,59 +172,120 @@ class MMBuilder:
                     print("---Depend = " + depend)
                     self.env.Depends(self.dict_targets[submodule], self.dict_targets[depend])
         self.build_module_node('module')
+        for lib in self.share_libs:
+            target.append(lib)
+        for lib in self.static_libs:
+            target.append(lib)
+        return target
 
-    def __init_arch(self, arch):
-        if arch is "":
-            arch = platform.machine()
-        arch_node = 'arch.' + arch
+    def copy_locallibs(self):
+        target = []
+        local_libs_dir = os.path.join("lib", self.arch)
+        if os.path.isdir(local_libs_dir):
+            for lib in self.local_libs:
+                target.append(self.env.Install(self.libs_dir, lib))
+        return target
+
+    def __init_arch(self):
+        arch_node = 'arch.' + self.arch
         env_cc = self.get_env(arch_node + ".CC")
         if env_cc is not None:
-            env['CC'] = env_cc
+            self.env['CC'] = env_cc
         env_cxx = self.get_env(arch_node + ".CXX")
         if env_cxx is not None:
-            env['CXX'] = env_cxx
+            self.env['CXX'] = env_cxx
         env_ccflags = self.get_env(arch_node + ".CCFLAGS")
         if env_ccflags is not None:
-            env.Append(CCFLAGS=env_ccflags)
+            self.env.Append(CCFLAGS=env_ccflags)
         env_cxxflags = self.get_env(arch_node + ".CXXFLAGS")
         if env_cxxflags is not None:
-            env.Append(CXXFLAGS=env_cxxflags)
-        env_shlinkflags = self.get_env(arch_node + ".SHLINKFLAGS")
-        if env_shlinkflags is not None:
-            env.Append(SHLINKFLAGS=env_shlinkflags)
-        print('arch = ' + arch)
-        return arch
+            self.env.Append(CXXFLAGS=env_cxxflags)
+        env_linkflags = self.get_env(arch_node + ".LINKFLAGS")
+        if env_linkflags is not None:
+            self.env.Append(LINKFLAGS=env_linkflags)
+
+    def dump(self):
+        print self.env.Dump("CCFLAGS")
+        print self.env.Dump("CXXFLAGS")
+        print self.env.Dump("SHLINKFLAGS")
+
+    def __init_depend_lib_files(self):
+        libs = []
+        for module in self.dep_modules:
+            # print 'module = %s' % module
+            sharelib_name = self.env['LIBPREFIX'] + module + self.env['SHLIBSUFFIX']
+            libs.append(os.path.join(self.libs_dir, sharelib_name))
+            static_name = self.env['LIBPREFIX'] + module + self.env['LIBSUFFIX']
+            libs.append(os.path.join(self.libs_dir, static_name))
+        return libs
 
     def packall(self):
-        all_share_libs = []
-        all_static_libs = []
-        for module in self.dep_modules:
-            sharelib_name = self.env['LIBPREFIX'] + module + self.env['SHLIBSUFFIX']
-            all_share_libs.append(os.path.join(self.libs_dir, sharelib_name))
-            static_name = env['LIBPREFIX'] + module + env['LIBSUFFIX']
-            all_static_libs.append(os.path.join(self.libs_dir, static_name))
-
         zip_dir = os.path.join(self.build_dir, "zip")
+        self.env.Accumulate(zip_dir, self.list_dep_inc)
         zip_libdir = os.path.join(zip_dir, "lib")
-        env.Accumulate(zip_dir, self.list_dep_inc)
-        env.Accumulate(zip_libdir, all_share_libs)
-        env.Accumulate(zip_libdir, all_static_libs)
-        zipall = env.Zipper(self.module_name + "_all", zip_dir)
-        env.Alias('packall', zipall)
+        self.env.Accumulate(zip_libdir, self.local_libs)
+        self.env.Accumulate(zip_libdir, self.depend_lib_files)
+        zip_path = os.path.join(self.build_dir, self.module_name + "_all")
+        zipall = self.env.Zipper(zip_path, zip_dir)
+        return zipall
+
+    def build_example(self):
+        target = []
+        list_inc = []
+        sources = mm.find_source(self.get_env_list('env.src_suffixes'), 'example')
+        self.list_append(list_inc, self.list_dep_inc)
+        self.list_append(list_inc, self.get_node_inc_dir(self.module_name))
+        test_env = env.Clone()
+        test_env.Append(LIBS=self.dep_modules)
+        test_env.Append(LIBPATH=self.libs_dir)
+        test_env.Append(CPPPATH=list_inc)
+        test_env.Append(LINKFLAGS='-Wl,-rpath,' + self.libs_dir)
+        for src in sources:
+            bin = os.path.join(self.build_dir, os.path.splitext(src)[0])
+            src = os.path.join(self.build_dir, src)
+            example = test_env.Program(target=bin, source=src)
+            target.append(example)
+        return target
 
 
 env = Environment(tools=['default', TOOL_ADD_HEADER])
-env['CCCOMSTR'] = "Compiling $TARGET"
-env['CXXCOMSTR'] = "Compiling $TARGET"
-env['LINKCOMSTR'] = "Linking $TARGET"
+# env['CCCOMSTR'] = "Compiling $TARGET"
+# env['CXXCOMSTR'] = "Compiling $TARGET"
+# env['LINKCOMSTR'] = "Linking $TARGET"
 # env['STATIC_AND_SHARED_OBJECTS_ARE_THE_SAME']=1
 # Export('env')
-arch = ARGUMENTS.get('arch', "")
 
-builder = MMBuilder(env, arch)
-builder.build_all()
-builder.default_target()
-builder.install()
-builder.packall()
+# platform = ARGUMENTS.get('config', Platform())
+config_path = ""
+mm_builder = MMBuilder(env, config_path)
 
+locallibs = mm_builder.copy_locallibs()
+env.Default(locallibs)
+
+dependlibs = mm_builder.depend_lib_files
+env.Default(locallibs)
+
+build_module = mm_builder.build_module()
+env.Depends(build_module, locallibs)
+env.Alias('modules', build_module)
+env.Default(build_module)
+
+build_example = mm_builder.build_example()
+# print "locallibs %s " % locallibs
+# print "dependlibs %s " % dependlibs
+env.Depends(build_example, locallibs)
+env.Depends(build_example, dependlibs)
+env.Depends(build_example, build_module)
+env.Alias('example', build_example)
+
+install = mm_builder.install()
+env.Depends(install, build_module)
+env.Alias('install', install)
+
+packall = mm_builder.packall()
+env.Depends(packall, dependlibs)
+env.Depends(packall, build_module)
+env.Alias('packall', packall)
+
+env.Command("clean", "", [Delete(mm_builder.build_dir)])
 

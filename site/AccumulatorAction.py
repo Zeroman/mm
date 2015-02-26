@@ -16,6 +16,6 @@ def accumulatorFunction(target, source, env):
   for s in source:
       s = str(s)
       if os.path.isdir(s):
-          myShutil.copytree(s, destDir, symlinks = False)
+          myShutil.copytree(s, destDir, symlinks = True)
       else:
           shutil.copy2(s, destDir) 

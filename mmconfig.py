@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import sys
-import pprint
 import ConfigParser
+
+import mmcommon
 
 
 class MMConfigFile(ConfigParser.ConfigParser):
@@ -18,20 +17,20 @@ class MMConfigFile(ConfigParser.ConfigParser):
 class MMConfig:
     def __init__(self):
         self.dict_configs = {}
-        self.dict_values = {}
 
     def read_config(self, filePath):
+        dict_values = {}
         config = MMConfigFile()
         config.read(filePath)
         sections = config.sections()
         for section in sections:
             items = config.items(section)
             for i, v in items:
-                self.dict_values[section + '.' + i] = v
+                dict_values[section + '.' + i] = v
                 # print('%s.%s = %s' % (section, i, v))
 
-        for k in self.dict_values.keys():
-            self.__set_value(k.split('.'), self.dict_values[k], self.dict_configs)
+        for k in dict_values.keys():
+            self.__set_value(k.split('.'), dict_values[k], self.dict_configs)
 
     def __set_value(self, name, value, map_config):
         # print(name, value, map_config)
@@ -39,17 +38,17 @@ class MMConfig:
         if name_len == 0:
             return
         key = name[0]
-        if not map_config.has_key(key):
+        if not map_config.has_key(key) or map_config[key] is None:
             map_config[key] = {}
         if name_len == 1:
             map_config[key][''] = value
         else:
             self.__set_value(name[1:], value, map_config[key])
 
-    def __get_dict_node(self, node):
-        split_strs = node.split('.')
+    def get_node_dict(self, node):
+        keys = node.split('.')
         dict_node = self.dict_configs
-        for key in split_strs:
+        for key in keys:
             if key == "":
                 break
             if not dict_node.has_key(key):
@@ -57,9 +56,30 @@ class MMConfig:
             dict_node = dict_node[key]
         return dict_node
 
+    def set_node_dict(self, node, value):
+        if value is None:
+            print(node + " value is None")
+            return
+        keys = node.split('.')
+        dict_node = self.dict_configs
+        key_count = len(keys)
+        for key_index in range(key_count - 1):
+            key = keys[key_index]
+            if dict_node is None:
+                dict_node = {}
+            if not dict_node.has_key(key):
+                dict_node[key] = {}
+            dict_node = dict_node[key]
+        key = keys[-1]
+        if not dict_node.has_key(key) or dict_node[key] is None:
+            dict_node[key] = value
+        else:
+            merge_dict = dict(dict_node[key].items() + value.items())
+            dict_node[key] = merge_dict
+
     def get_items(self, node):
         items = []
-        dict_node = self.__get_dict_node(node)
+        dict_node = self.get_node_dict(node)
         if dict_node is None:
             return items
         for key in dict_node.keys():
@@ -68,7 +88,7 @@ class MMConfig:
         return items
 
     def get_value(self, node, defvalue=""):
-        dict_node = self.__get_dict_node(node)
+        dict_node = self.get_node_dict(node)
         if dict_node is None:
             return defvalue
         if not dict_node.has_key(""):
@@ -76,16 +96,48 @@ class MMConfig:
             return defvalue
         return dict_node[""]
 
+    def save(self, path, node=""):
+        config = MMConfigFile()
+        dict_values = self.__to_dict_values(node)
+        for (k, v) in dict_values.items():
+            nodes = k.split('.')
+            section = ".".join(nodes[:-1])
+            if section == "":
+                continue
+            key = nodes[-1]
+            if not config.has_section(section):
+                config.add_section(section)
+            config.set(section, key, v)
+        config.write(file(path, 'w'))
+
     def show(self, node=""):
-        dict_node = self.__get_dict_node(node)
+        dict_node = self.get_node_dict(node)
         if dict_node is not None:
             self.__show("", dict_node)
 
-    def show_values(self):
-        for k in sorted(self.dict_values.keys()):
-            print('%s = %s' % (k, self.dict_values[k]))
+    def show_values(self, node=""):
+        dict_values = self.__to_dict_values(node)
+        for k in sorted(dict_values.keys()):
+            print('%s = %s' % (k, dict_values[k]))
+
+    def __to_dict_values(self, node=""):
+        dict_values = {}
+
+        def __to_values(str_node, dict_value):
+            for key in dict_value.keys():
+                value = dict_value[key]
+                temp_node = mmcommon.join_node(str_node, key)
+                # print("%s : %s = %s" % (str_node, key, value))
+                if key != "":
+                    __to_values(temp_node, value)
+                else:
+                    dict_values[temp_node] = value
+
+        __to_values(node, self.get_node_dict(node))
+        return dict_values
 
     def convert_scons(self, node=""):
+        dict_values = {}
         scons_lines = []
         scons_lines.append("Import('env')\n")
         node_len = len(node)
@@ -94,7 +146,7 @@ class MMConfig:
             env = key.replace('.', '_')
             scons_lines.append("env.Append(%s= '%s')\n" % (env, value))
 
-        for (key, value) in sorted(self.dict_values.items()):
+        for (key, value) in sorted(dict_values.items()):
             if node_len == 0:
                 append_to_list(key, value)
                 continue
