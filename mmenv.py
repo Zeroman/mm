@@ -9,7 +9,6 @@ import mmrepo
 
 class MMEnv:
     def __init__(self):
-        self.__local_repo_dirs = []
         self.__config_path = []
 
         self.mm_path = os.path.dirname(os.path.realpath(__file__))
@@ -32,36 +31,38 @@ class MMEnv:
                 # print("mm  " + config_file)
                 self.__config.read_config(config_file)
 
-        self.build_dir = self.__config.get_value("env.build_dir", ".")
+        self.build_dir = self.__config.get_value("env.build_dir", "mm_build")
         mmcommon.mkdir(self.build_dir)
+        self.source_dir = self.__config.get_value("env.src_dir", "mm_source")
+        mmcommon.mkdir(self.source_dir)
 
-        repos = self.__config.get_items("repo.local")
+        self.__repo_objs = []
+        repos = self.__config.get_items("repo.dir")
         for repo in repos:
-            dir = self.__config.get_value("repo.local." + repo + ".dir")
-            assert os.path.isdir(dir)
-            self.__local_repo_dirs.append(dir)
+            url = self.__config.get_value("repo.dir." + repo + ".url")
+            assert os.path.isdir(url)
+            self.__repo_objs.append(mmrepo.MMDirRepo(repo, url))
+        repos = self.__config.get_items("repo.single")
+        for repo in repos:
+            url = self.__config.get_value("repo.single." + repo + ".url")
+            assert os.path.isdir(url)
+            self.__repo_objs.append(mmrepo.MMSingleRepo(repo, url))
 
-        mm_libs_path = os.getenv('MM_LIBS_PATH')
-        if mm_libs_path is not None:
-            self.__config.set_value("env.libs_dir", mm_libs_path)
+        mm_lib_path = os.getenv('MM_LIB_PATH')
+        if mm_lib_path is not None:
+            self.__config.set_value("env.lib_dir", mm_lib_path)
 
-        mm_repo_path = os.getenv('MM_REPO_PATH')
+        mm_repo_path = os.getenv('MM_REPO_LOCAL_PATH')
         if mm_repo_path is not None:
-            self.__config.set_value("repo.local.env.dir", mm_repo_path)
+            self.__config.set_value("repo.dir.env.url", mm_repo_path)
             assert os.path.isdir(mm_repo_path)
-            self.__local_repo_dirs.append(mm_repo_path)
+            self.__repo_objs.append(mmrepo.MMDirRepo('env', mm_repo_path))
 
     def __add_cmd_param(self, param, add_param):
         return param + " " + add_param + " "
 
     def get_repo(self):
-        repo_objs = []
-        for repo in self.__local_repo_dirs:
-            repo_objs.append(mmrepo.MMLocalRepo(repo))
-        return repo_objs
-
-    def sources_dir(self):
-        return self.__config.get_value("env.srcs_dir", "mm_srcs")
+        return self.__repo_objs
 
     def build_module(self, path, argv=""):
         print("+" * 20 + "Start build %s" % os.path.basename(path) + "+" * 20)
@@ -78,6 +79,7 @@ class MMEnv:
 
     def show(self):
         self.__config.show()
+
 
 if __name__ == "__main__":
     env = MMEnv()

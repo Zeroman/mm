@@ -24,6 +24,8 @@ if __name__ == "__main__":
     map_argv["-b"] = "build"
     map_argv["B"] = "build_depends"
     map_argv["-B"] = "build_depends"
+    map_argv["s"] = "--tree=all"
+    map_argv["sn"] = "--tree=all -n"
 
     arch = ""
     for arg in sys.argv:

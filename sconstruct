@@ -3,11 +3,19 @@
 
 import os
 
-import mmenv
-import mmrepo
-import mmcommon
-import mmmodule
 import mmconfig
+import mmenv
+import mmmodule
+
+global mm_module_arch
+global mm_module_env
+
+mm_module_env = mmenv.MMEnv()
+mm_module_arch = ARGUMENTS.get('arch', '')
+
+
+def get_module(name, ver, repo):
+    return mmmodule.get_module(name, ver, repo, mm_module_arch, mm_module_env)
 
 
 class MMBuilder:
@@ -72,7 +80,7 @@ class MMBuilder:
         return self.__config.get_value(env_name, None)
 
 
-    def get_module_name(self, module_node):
+    def get_mm_module_name(self, module_node):
         name = self.get_env(module_node + '.name')
         if name is None:
             name = module_node.split('.')[-1]
@@ -92,7 +100,7 @@ class MMBuilder:
         return inc_dir
 
     def get_node_sources(self, node):
-        name = self.get_module_name(node)
+        name = self.get_mm_module_name(node)
         sources = self.get_env_list(node + '.sources', [])
         if 'none' in sources:
             return []
@@ -152,7 +160,7 @@ class MMBuilder:
         self.list_append(list_inc, self.get_node_src_dir(module_node))
         self.list_append(list_inc, self.list_dep_inc)
         self.list_append(list_inc, self.get_env_list(module_node + ".build.inc_dir"))
-        name = self.get_module_name(module_node)
+        name = self.get_mm_module_name(module_node)
         lib_name = os.path.join(self.libs_dir, name)
         sharelib = self.env.SharedLibrary(target=lib_name, source=sources, CPPPATH=list_inc)
         staticlib = self.env.StaticLibrary(target=lib_name, source=sources, CPPPATH=list_inc)
@@ -248,44 +256,92 @@ class MMBuilder:
         return target
 
 
+def init_module_config(target, source, env):
+    module = source[0].value
+    print("target = " + str(target[0]))
+    module.save_module_config(str(target[0]))
+
+def get_build_cfg(module):
+    return os.path.join(module.module_dir, "build.cfg")
+
+def init_module(module, name_stack=[]):
+    name_stack.append(str(module))
+
+    module.init_source()
+    module.init_config()
+    build_cfg = get_build_cfg(module)
+    for (name, ver, repo) in module.module_depend:
+        dep_module = get_module(name, ver, repo)
+        if str(dep_module) in name_stack:
+            print("Depend error")
+            return
+        dep_build_cfg = get_build_cfg(dep_module)
+        env.Depends(build_cfg, dep_build_cfg)
+        init_module(dep_module, name_stack)
+
+    name_stack.pop()
+
+
+def build_module(module):
+    print mm_module_env.build_dir, module.module_dir
+    build_cfg = get_build_cfg(module)
+    # env.Command(build_cfg, env.Value(module), init_module_config)
+
+def build_example(module):
+    pass
+
+
+def build_unittest(module):
+    pass
+
+
 env = Environment(tools=['default', TOOL_ADD_HEADER])
+env.VariantDir(mm_module_env.build_dir, mm_module_env.source_dir, duplicate=0)
 # env['CCCOMSTR'] = "Compiling $TARGET"
 # env['CXXCOMSTR'] = "Compiling $TARGET"
 # env['LINKCOMSTR'] = "Linking $TARGET"
 # env['STATIC_AND_SHARED_OBJECTS_ARE_THE_SAME']=1
 # Export('env')
 
-# platform = ARGUMENTS.get('config', Platform())
-config_path = ""
-mm_builder = MMBuilder(env, config_path)
+name = ARGUMENTS.get('name', '')
+ver = ARGUMENTS.get('ver', '')
+repo = ARGUMENTS.get('repo', '')
+current_module = get_module(name, ver, repo)
+init_module(current_module)
+build_module(current_module)
 
-locallibs = mm_builder.copy_locallibs()
-env.Default(locallibs)
+if False:
+    # platform = ARGUMENTS.get('config', Platform())
+    config_path = ""
+    mm_builder = MMBuilder(env, config_path)
 
-dependlibs = mm_builder.depend_lib_files
-env.Default(locallibs)
+    locallibs = mm_builder.copy_locallibs()
+    env.Default(locallibs)
 
-build_module = mm_builder.build_module()
-env.Depends(build_module, locallibs)
-env.Alias('modules', build_module)
-env.Default(build_module)
+    dependlibs = mm_builder.depend_lib_files
+    env.Default(locallibs)
 
-build_example = mm_builder.build_example()
-# print "locallibs %s " % locallibs
-# print "dependlibs %s " % dependlibs
-env.Depends(build_example, locallibs)
-env.Depends(build_example, dependlibs)
-env.Depends(build_example, build_module)
-env.Alias('example', build_example)
+    build_module = mm_builder.build_module()
+    env.Depends(build_module, locallibs)
+    env.Alias('modules', build_module)
+    env.Default(build_module)
 
-install = mm_builder.install()
-env.Depends(install, build_module)
-env.Alias('install', install)
+    build_example = mm_builder.build_example()
+    # print "locallibs %s " % locallibs
+    # print "dependlibs %s " % dependlibs
+    env.Depends(build_example, locallibs)
+    env.Depends(build_example, dependlibs)
+    env.Depends(build_example, build_module)
+    env.Alias('example', build_example)
 
-packall = mm_builder.packall()
-env.Depends(packall, dependlibs)
-env.Depends(packall, build_module)
-env.Alias('packall', packall)
+    install = mm_builder.install()
+    env.Depends(install, build_module)
+    env.Alias('install', install)
 
-env.Command("clean", "", [Delete(mm_builder.build_dir)])
+    packall = mm_builder.packall()
+    env.Depends(packall, dependlibs)
+    env.Depends(packall, build_module)
+    env.Alias('packall', packall)
+
+    env.Command("clean", "", [Delete(mm_builder.build_dir)])
 

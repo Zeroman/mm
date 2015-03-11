@@ -13,13 +13,13 @@ DEFAULT_UNITTEST_DIR = "test/unit"
 
 
 class MMModConfig:
-    def __init__(self, module_path, arch=''):
-        self.__module_path = module_path
+    def __init__(self, module_src, arch=''):
+        self.__module_src = module_src
         self.__module_arch = arch
         if arch == '':
             self.__module_arch = default_arch()
         self.__config = mmconfig.MMConfig()
-        config_path = os.path.join(module_path, MM_CONFIG)
+        config_path = os.path.join(module_src, MM_CONFIG)
         self.__config.read_config(config_path)
 
     def get_source_dir(self):
@@ -47,13 +47,18 @@ class MMModConfig:
         return dir
 
     def get_depend(self):
-        depend = self.__config.get_value("module.depend", '').split(',')
-        node = join_node("module.depend", self.__module_arch)
-        arch_depend = self.__config.get_value(node, '').split(',')
-        depends = depend + arch_depend
-        while depends.count('') > 0:
-            depends.remove('')
-        return depends
+        depend = []
+
+        def __get_depends(node):
+            depend_names = self.__config.get_items(node)
+            for name in depend_names:
+                ver = self.__config.get_value(join_node(node, name, "ver"), '')
+                repo = self.__config.get_value(join_node(node, name, "repo"), '')
+                depend.append([name, ver, repo])
+
+        __get_depends("module.depend")
+        __get_depends(join_node("module.depend", self.__module_arch))
+        return depend
 
     def show(self):
         self.__config.show()
@@ -65,3 +70,4 @@ if __name__ == "__main__":
     print("inc_dir = " + mod_config.get_source_dir())
     print("lib_dir = " + mod_config.get_lib_dir())
     print("test_dir = " + mod_config.get_test_dir())
+    print(mod_config.get_depend())

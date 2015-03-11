@@ -5,11 +5,13 @@ import os
 import platform
 import shutil
 import os.path
+import collections
 import re
 
 
-MM_CONFIG = r"mm.cfg"
-MM_SOURCE = r'.mm_source'
+MM_CONFIG = r'mm.cfg'
+MM_BUILD_CONFIG = r'mm_build.cfg'
+MM_STAMP_SOURCE = r'.stamp_source'
 
 
 def default_arch():
@@ -129,7 +131,7 @@ def find_source(suffixlist, path='.', recursive=False):
 
     :rtype : list
     """
-    sources = []
+    source = []
 
     def find_func(arg, dirname, names):
         files = [os.path.normpath(os.path.join(dirname, file)) for file in names]
@@ -137,11 +139,11 @@ def find_source(suffixlist, path='.', recursive=False):
             if os.path.isdir(file):
                 continue
             if len(suffixlist) == 0:
-                sources.append(file)
+                source.append(file)
             else:
                 ext = os.path.splitext(file)[1]
                 if ext in suffixlist:
-                    sources.append(file)
+                    source.append(file)
 
     if recursive:
         os.path.walk(path, find_func, None)
@@ -151,8 +153,8 @@ def find_source(suffixlist, path='.', recursive=False):
             find_func(None, path, names)
         except os.error:
             print("os.error")
-            return sources
-    return sources
+            return source
+    return source
 
 
 def check_version(param):
@@ -181,8 +183,34 @@ def get_module_info(info):
     return (repo, name, ver)
 
 
-def module_name_to_dir(name):
-    return name.replace(".", os.path.sep)
+def module_to_dir(name, ver):
+    return os.path.join(name.replace(".", os.path.sep), ver)
+
+
+def module_to_str(name, ver, repo):
+    return name + ":" + ver + ":" + repo
+
+
+class LRUCache:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.cache = collections.OrderedDict()
+
+    def get(self, key):
+        try:
+            value = self.cache.pop(key)
+            self.cache[key] = value
+            return value
+        except KeyError:
+            return None
+
+    def set(self, key, value):
+        try:
+            self.cache.pop(key)
+        except KeyError:
+            if len(self.cache) >= self.capacity:
+                self.cache.popitem(last=False)
+        self.cache[key] = value
 
 
 if __name__ == "__main__":

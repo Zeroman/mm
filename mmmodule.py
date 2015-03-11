@@ -1,60 +1,103 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import os
 import sys
 
 from mmcommon import *
 import mmcommon
 import mmenv
+import mmrepo
 import mmconfig
 import mmmodconfig
 
 
+config_cache = mmcommon.LRUCache(100)
+module_cache = mmcommon.LRUCache(100)
+
+
+def get_module_config(module_dir, module_arch):
+    assert os.path.exists(module_dir)
+
+    config = config_cache.get(module_dir)
+    if config is not None:
+        return config
+
+    module_config = mmmodconfig.MMModConfig(module_dir, module_arch)
+    config_cache.set(module_dir, module_config)
+    return module_config
+
+
+def get_module(name='', ver='', repo='', arch='', env=None):
+    info = mmcommon.module_to_str(name, ver, repo)
+    module = module_cache.get(info)
+    if module is not None:
+        return module
+    module = MMModule(name, ver, repo, arch, env)
+    module_cache.set(info, module)
+    return module
+
+
 class MMModule:
-    def __init__(self, name='', repo='', ver='', srcs_dir='', env=None):
+    def __init__(self, name='', ver='', repo='', arch='', env=None):
         self.env = env
         if self.env is None:
             self.env = mmenv.MMEnv()
 
+        self.module_arch = arch
+        if arch == '':
+            self.module_arch = default_arch()
+
         self.module_name = name
-        if name == '':
-            self.module_name = os.path.basename(self.module_path)
-
-        self.repos = self.env.get_repo()
-        self.sources_dir = srcs_dir
-        if self.sources_dir == '':
-            self.sources_dir = self.env.sources_dir()
-            self.get_sources_from_repo(self.module_name)
-
-        if name == "":
-            self.module_path = os.path.normpath(os.getcwd())
-        else:
-            self.module_path = self.__module_path(self.module_name)
-
         self.module_ver = ver
-        self.module_repo = repo
+        repo_name = ""
+        if self.module_name is '':
+            curpath = os.getcwd()
+            self.module_name = os.path.basename(curpath)
+            self.module_repo = None
+            self.module_path = curpath
+            self.module_dir = ''
+        else:
+            self.module_repo = self.__find_module_repo(repo)
+            repo_name = self.module_repo.get_name()
+            assert self.module_repo is not None
+            self.module_dir = mmcommon.module_to_dir(self.module_name, self.module_ver)
+            self.module_path = os.path.join(self.env.source_dir, self.module_dir)
+        self.module_info = mmcommon.module_to_str(self.module_name, self.module_ver, repo_name)
 
-        self.__mod_config = mmmodconfig.MMModConfig(self.module_path)
+        self.module_depend = []
+        self.all_module_depend = []
 
-        self.__depend_stack = []
-        self.mm_depends = []
-        self.mm_all_depends_list = []
-        self.mm_all_depends_dict = {}
-        self.module_incdir_dict = {}
-        self.depend_config_dict = {}
+    def __find_module_repo(self, name):
+        for repo in self.env.get_repo():
+            # print("find module " + module_name + " in " + repo.get_name())
+            if name is not '' and repo.get_name() != name:
+                continue
+            if repo.have_module(self.module_name, self.module_ver):
+                return repo
+        return None
 
-        self.mm_depends = self.__mod_config.get_depend()
-        self.__proc_depends()
+    def __str__(self):
+        return "<" + self.module_info + ">"
 
+
+    def init_config(self):
+        self.module_config = get_module_config(self.module_path, self.module_arch)
+        self.module_depend = self.module_config.get_depend()
         # self.__init_config()
 
+    def init_depend(self):
+        self.__depend_stack = []
+        self.all_module_depend = []
+        self.__all_depends_dict = {}
+        self.__proc_depends()
 
     def __init_config(self):
-        for module_name in self.mm_all_depends_list:
-            __config = self.get_module_config(module_name)
+        for module_name in self.all_module_depend:
+            __config = get_module_config(module_name)
 
             node = join_node("module", "inc_dir");
             inc_dir = __config.get_value(node, "include")
-            inc_dir = os.path.join(self.__module_path(module_name), inc_dir)
+            inc_dir = os.path.join(self.module_dir, inc_dir)
             node = join_node("module", "depend", module_name, "inc_dir");
             self.__config.set_value(node, inc_dir)
 
@@ -70,64 +113,36 @@ class MMModule:
             set_depend_config(module_name, "LINKFLAGS")
 
         self.__config.set_value("module.name", self.module_name)
-        self.__config.set_value("module.depend", ",".join(self.mm_all_depends_list))
+        self.__config.set_value("module.depend", ",".join(self.all_module_depend))
 
-    def get_sources_from_repo(self, module_info):
-        def get_module(name, ver):
-            dest_path = self.sources_dir
-            source_ok = os.path.join(dest_path, name, ver, mmcommon.MM_SOURCE)
-            if os.path.exists(source_ok):
-                info = mmcommon.read_file(source_ok)
-                if info == module_info:
-                    return True
-            print('dest path = ' + dest_path)
-            if repo.pull_module(name, dest_path, ver):
-                mmcommon.create_file(source_ok, module_info)
-                return True
-            return False
+    def init_source(self):
+        if self.module_repo is None:
+            return True
 
         ret = False
-        (repo_name, module_name, module_ver) = mmcommon.get_module_info(module_info)
-        for repo in self.repos:
-            if repo_name != '':
-                if repo.get_name() == repo_name:
-                    ret = get_module(module_name, module_ver)
-                    break
-            else:
-                ret = get_module(module_name, module_ver)
-                if ret:
-                    break
+        stamp_source = os.path.join(self.module_path, mmcommon.MM_STAMP_SOURCE)
+        if os.path.exists(stamp_source):
+            info = mmcommon.read_file(stamp_source)
+            if info == self.module_info:
+                return True
+
+        if self.module_repo.pull_module(self.env.source_dir, self.module_name, self.module_ver):
+            mmcommon.create_file(stamp_source, self.module_info)
+            ret = True
+
+        if not ret:
+            print("Cann't find module " + self.module_info)
         return ret
-
-
-    def __module_path(self, module_name):
-        path = os.path.join(self.sources_dir, module_name)
-        if os.path.exists(path):
-            return path
-        else:
-            return None
-
-    def get_module_config(self, module_name):
-        if self.depend_config_dict.has_key(module_name):
-            return self.depend_config_dict[module_name]
-        __config = mmconfig.MMConfig()
-
-        module_path = self.__module_path(module_name)
-        if module_path is None:
-            print("can't find module " + module_name)
-            return None
-        # print("find module_path =" + module_path)
-        __config.read_config(os.path.join(module_path, MM_CONFIG))
-        self.depend_config_dict[module_name] = __config
-        return __config
 
     def __proc_depends(self):
         dict_depends = {}
-        for depend in self.mm_depends:
+        for (name, ver, repo) in self.module_depend:
             # print("depend -> %s" % depend)
-            dict_depends[depend] = self.__get_depends(depend)
-        self.mm_all_depends_dict[self.module_name] = dict_depends
-        self.__depends_dict_to_list(self.mm_all_depends_dict, self.mm_all_depends_list)
+            info = mmcommon.module_to_str(name, ver, repo)
+            dict_depends[info] = self.__get_depends(name, ver, repo)
+
+        self.__all_depends_dict[self.module_name] = dict_depends
+        self.__depends_dict_to_list(self.__all_depends_dict, self.all_module_depend)
 
     def __depends_dict_to_list(self, depends_dict, depends_list):
         data = depends_dict.items()
@@ -157,26 +172,25 @@ class MMModule:
             else:
                 self.__show_map(base + '    ', v)
 
-    def __get_depends(self, module_name):
-        mm_depends = {}
-        if module_name in self.__depend_stack:
-            print("Error : depend come back to self: %s" % (module_name))
-            return mm_depends
-        self.__depend_stack.append(module_name)
-        self.get_sources_from_repo(module_name)
-        module_path = self.__module_path(module_name)
-        module_config = mmmodconfig.MMModConfig(module_path)
+    def __get_depends(self, name, ver, repo):
+        module_depend = {}
+        info = mmcommon.module_to_str(name, ver, repo)
+        if info in self.__depend_stack:
+            print("Error : depend come back to self: %s" % (info))
+            return module_depend
+        self.__depend_stack.append(info)
+        module_config = get_module_config(module_dir)
         depends = module_config.get_depend()
         if len(depends) is 0:
             # print("%s -> none " % module_name)
             self.__depend_stack.pop()
-            return mm_depends
+            return module_depend
         for depend in depends:
             if depend != "":
                 # print("depend -> %s" % depend)
-                mm_depends[depend] = self.__get_depends(depend)
+                module_depend[depend] = self.__get_depends(depend)
         self.__depend_stack.pop()
-        return mm_depends
+        return module_depend
 
 
     def __convert_env_config(self, name, bitem=False):
@@ -202,9 +216,9 @@ class MMModule:
 
     def save_module_config(self, path):
         config = mmconfig.MMConfig()
-        config.set_node_dict("env", self.__config.get_node_dict("env"))
-        node = join_node("module", "depend")
-        config.set_node_dict(node, self.__config.get_node_dict(node))
+        # config.set_node_dict("env", self.module_config.get_node_dict("env"))
+        # node = join_node("module", "depend")
+        # config.set_node_dict(node, self.module_config.get_node_dict(node))
         # config.show()
         config.show_values()
         config.save(path)
@@ -217,18 +231,20 @@ class MMModule:
 
     def show_env(self):
         print("-" * 50)
-        self.__mod_config.show()
-
-
-    def show_depends(self):
-        print("-" * 50)
-        self.__show_map("", self.mm_all_depends_dict)
+        print("source dir : " + self.env.source_dir)
+        print("depend %s " % self.module_depend)
+        self.module_config.show()
 
 
 if __name__ == "__main__":
-    # mm_module = MMModule(name="sqlite3pp", srcs_dir="/work/com/zm")
+    # mm_module = MMModule(name="sqlite3pp", source_dir="/work/com/zm")
     # mm_module.show_depends()
-    mm_module = MMModule(name="sqlite3pp")
-    mm_module.get_sources_from_repo("gtest")
-    mm_module.show_depends()
+    mm_module = MMModule("sqlite3pp")
+    mm_module.init_source()
+    mm_module.init_config()
+    mm_module.show_env()
+
+    mm_module = MMModule()
+    mm_module.init_source()
+    mm_module.init_config()
     mm_module.show_env()
