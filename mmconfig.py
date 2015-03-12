@@ -45,21 +45,27 @@ class MMConfig:
         else:
             self.__set_value(name[1:], value, map_config[key])
 
-    def get_node_dict(self, node):
+    def get_node_dict(self, node, create=False):
         keys = node.split('.')
         dict_node = self.dict_configs
         for key in keys:
             if key == "":
                 break
             if not dict_node.has_key(key):
-                return None
+                if create:
+                    dict_node[key] = {}
+                else:
+                    return None
             dict_node = dict_node[key]
         return dict_node
 
+    def add_node_dict(self, node, value):
+        self.__set_node_dict(node, value, True)
+
     def set_node_dict(self, node, value):
-        if value is None:
-            print(node + " value is None")
-            return
+        self.__set_node_dict(node, value, False)
+
+    def __set_node_dict(self, node, value, is_add):
         keys = node.split('.')
         dict_node = self.dict_configs
         key_count = len(keys)
@@ -71,11 +77,17 @@ class MMConfig:
                 dict_node[key] = {}
             dict_node = dict_node[key]
         key = keys[-1]
-        if not dict_node.has_key(key) or dict_node[key] is None:
-            dict_node[key] = value
-        else:
+        if is_add and value is not None and dict_node.has_key(key):
             merge_dict = dict(dict_node[key].items() + value.items())
             dict_node[key] = merge_dict
+        else:
+            dict_node[key] = value
+
+    def move_node(self, src_node, dst_node):
+        dict_node = self.get_node_dict(src_node)
+        if dict_node is not None:
+            self.set_node_dict(src_node, None)
+            self.set_node_dict(dst_node, dict_node)
 
     def get_items(self, node):
         items = []
@@ -124,6 +136,8 @@ class MMConfig:
         dict_values = {}
 
         def __to_values(str_node, dict_value):
+            if dict_value is None:
+                return
             for key in dict_value.keys():
                 value = dict_value[key]
                 temp_node = mmcommon.join_node(str_node, key)
@@ -185,8 +199,14 @@ if __name__ == "__main__":
     # mm.read_config("mm_1.ini")
     # mm.read_config("mm_2.ini")
     mm.read_config("mm.cfg")
+
+    mm = MMConfig()
     mm.set_value("set.s", 1)
     mm.set_value("set.r", 2)
+    mm.show()
+    mm.add_node_dict("set.t", {"":3})
+    mm.show()
+    mm.move_node("set", "test.move.set")
     mm.show()
     # mm.show_values()
     # mm.show("module.depend")

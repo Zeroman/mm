@@ -6,6 +6,7 @@ import os
 import mmconfig
 import mmenv
 import mmmodule
+from mmcommon import *
 
 global mm_module_arch
 global mm_module_env
@@ -256,29 +257,57 @@ class MMBuilder:
         return target
 
 
+def build_module_config(target, source, env):
+    build_config = mmconfig.MMConfig()
+    mm_config = mmconfig.MMConfig()
+    mm_config.read_config(str(source[0]))
+    mm_config.show()
+    node = join_node("module.build", source[0].module_name)
+    build_config.set_value(join_node(node, "inc_dir"), mm_config.get_value("module.inc_dir"))
+    build_config.set_value(join_node(node, "LINKFLAGS"), mm_config.get_value("module.LINKFLAGS"))
+    build_config.set_node_dict("module.depend", mm_config.get_node_dict("module.depend"))
+    for dep_node in source[1:]:
+        dep_cfg_file = str(dep_node)
+        dep_cfg = mmconfig.MMConfig()
+        dep_cfg.read_config(dep_cfg_file)
+        node = "module.build"
+        build_config.add_node_dict(node, dep_cfg.get_node_dict(node))
+    # build_config.show()
+    build_config.save(str(target[0]))
+
+
 def init_module_config(target, source, env):
     module = source[0].value
     print("target = " + str(target[0]))
     module.save_module_config(str(target[0]))
 
+
 def get_build_cfg(module):
-    return os.path.join(module.module_dir, "build.cfg")
+    return os.path.join(mm_module_env.build_dir, module.module_dir, "build.cfg")
+
 
 def init_module(module, name_stack=[]):
     name_stack.append(str(module))
 
     module.init_source()
     module.init_config()
+    depend_node = []
     build_cfg = get_build_cfg(module)
+    mm_cfg = os.path.join(module.module_path, MM_CONFIG)
+    print("%s %s" % (module.module_name, module.module_path))
+    mm_cfg_node = File(mm_cfg)
+    mm_cfg_node.module_name = module.module_name
+    depend_node.append(mm_cfg_node)
     for (name, ver, repo) in module.module_depend:
         dep_module = get_module(name, ver, repo)
         if str(dep_module) in name_stack:
             print("Depend error")
             return
         dep_build_cfg = get_build_cfg(dep_module)
-        env.Depends(build_cfg, dep_build_cfg)
+        depend_node.append(dep_build_cfg)
+        print("%s -> [%s %s]" % (build_cfg, mm_cfg, dep_build_cfg))
         init_module(dep_module, name_stack)
-
+    env.Command(build_cfg, depend_node, build_module_config)
     name_stack.pop()
 
 
@@ -286,6 +315,7 @@ def build_module(module):
     print mm_module_env.build_dir, module.module_dir
     build_cfg = get_build_cfg(module)
     # env.Command(build_cfg, env.Value(module), init_module_config)
+
 
 def build_example(module):
     pass
@@ -296,7 +326,7 @@ def build_unittest(module):
 
 
 env = Environment(tools=['default', TOOL_ADD_HEADER])
-env.VariantDir(mm_module_env.build_dir, mm_module_env.source_dir, duplicate=0)
+# env.VariantDir(mm_module_env.build_dir, mm_module_env.source_dir, duplicate=0)
 # env['CCCOMSTR'] = "Compiling $TARGET"
 # env['CXXCOMSTR'] = "Compiling $TARGET"
 # env['LINKCOMSTR'] = "Linking $TARGET"
@@ -307,6 +337,10 @@ name = ARGUMENTS.get('name', '')
 ver = ARGUMENTS.get('ver', '')
 repo = ARGUMENTS.get('repo', '')
 current_module = get_module(name, ver, repo)
+# if name is '':
+module_build_dir = os.path.join(mm_module_env.build_dir, module_to_dir(name, ver))
+print(module_build_dir, current_module.module_path)
+env.VariantDir(module_build_dir, current_module.module_path, duplicate=0)
 init_module(current_module)
 build_module(current_module)
 

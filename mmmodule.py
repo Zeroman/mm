@@ -6,7 +6,6 @@ import sys
 from mmcommon import *
 import mmcommon
 import mmenv
-import mmrepo
 import mmconfig
 import mmmodconfig
 
