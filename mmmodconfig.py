@@ -26,6 +26,11 @@ class MMModConfig:
         dir = self.__config.get_value("module.src_dir", DEFAULT_SRC_DIR)
         return dir
 
+    def get_source(self):
+        source = self.__config.get_value("module.source")
+        return source
+
+
     def get_include_dir(self):
         dir = self.__config.get_value("module.inc_dir", DEFAULT_INC_DIR)
         return dir

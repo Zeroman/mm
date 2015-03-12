@@ -4,14 +4,13 @@ import os
 import sys
 
 from mmcommon import *
-import mmcommon
 import mmenv
 import mmconfig
 import mmmodconfig
 
 
-config_cache = mmcommon.LRUCache(100)
-module_cache = mmcommon.LRUCache(100)
+config_cache = LRUCache(100)
+module_cache = LRUCache(100)
 
 
 def get_module_config(module_dir, module_arch):
@@ -27,7 +26,7 @@ def get_module_config(module_dir, module_arch):
 
 
 def get_module(name='', ver='', repo='', arch='', env=None):
-    info = mmcommon.module_to_str(name, ver, repo)
+    info = module_to_str(name, ver, repo)
     module = module_cache.get(info)
     if module is not None:
         return module
@@ -48,7 +47,7 @@ class MMModule:
 
         self.module_name = name
         self.module_ver = ver
-        repo_name = ""
+        self.module_repo_name = ""
         if self.module_name is '':
             curpath = os.getcwd()
             self.module_name = os.path.basename(curpath)
@@ -57,13 +56,28 @@ class MMModule:
             self.module_dir = ''
         else:
             self.module_repo = self.__find_module_repo(repo)
-            repo_name = self.module_repo.get_name()
+            self.module_repo_name = self.module_repo.get_name()
             assert self.module_repo is not None
-            self.module_dir = mmcommon.module_to_dir(self.module_name, self.module_ver)
+            self.module_dir = module_to_dir(self.module_name, self.module_ver)
             self.module_path = os.path.join(self.env.source_dir, self.module_dir)
-        self.module_info = mmcommon.module_to_str(self.module_name, self.module_ver, repo_name)
+        self.module_info = module_to_str(self.module_name, self.module_ver, self.module_repo_name)
 
         self.module_depend = []
+
+        self.source_dir = None
+        self.lib_dir = None
+        self.install_lib_dir = None
+
+        self.inc_dir = []
+        self.dep_inc_dir = []
+        self.ccflags = []
+        self.dep_ccflags = []
+        self.cxxflags = []
+        self.dep_cxxflags = []
+        self.linkflags = []
+        self.dep_linkflags = []
+
+        self.__all_depends_dict = None
         self.all_module_depend = []
 
     def __find_module_repo(self, name):
@@ -82,51 +96,28 @@ class MMModule:
     def init_config(self):
         self.module_config = get_module_config(self.module_path, self.module_arch)
         self.module_depend = self.module_config.get_depend()
-        # self.__init_config()
+        self.source_dir = self.module_config.get_source_dir()
+        self.lib_dir = self.module_config.get_lib_dir()
+        self.install_lib_dir = self.env.lib_dir
 
     def init_depend(self):
-        self.__depend_stack = []
         self.all_module_depend = []
         self.__all_depends_dict = {}
         self.__proc_depends()
-
-    def __init_config(self):
-        for module_name in self.all_module_depend:
-            __config = get_module_config(module_name)
-
-            node = join_node("module", "inc_dir");
-            inc_dir = __config.get_value(node, "include")
-            inc_dir = os.path.join(self.module_dir, inc_dir)
-            node = join_node("module", "depend", module_name, "inc_dir");
-            self.__config.set_value(node, inc_dir)
-
-            def set_depend_config(module_name, param):
-                node = join_node("module", param)
-                value = __config.get_value(node, "")
-                node = join_node("module", "depend", module_name, param)
-                if value is not None and value is not "":
-                    self.__config.set_value(node, value)
-
-            set_depend_config(module_name, "CCFLAGS")
-            set_depend_config(module_name, "CXXFLAGS")
-            set_depend_config(module_name, "LINKFLAGS")
-
-        self.__config.set_value("module.name", self.module_name)
-        self.__config.set_value("module.depend", ",".join(self.all_module_depend))
 
     def init_source(self):
         if self.module_repo is None:
             return True
 
         ret = False
-        stamp_source = os.path.join(self.module_path, mmcommon.MM_STAMP_SOURCE)
+        stamp_source = os.path.join(self.module_path, MM_STAMP_SOURCE)
         if os.path.exists(stamp_source):
-            info = mmcommon.read_file(stamp_source)
+            info = read_file(stamp_source)
             if info == self.module_info:
                 return True
 
         if self.module_repo.pull_module(self.env.source_dir, self.module_name, self.module_ver):
-            mmcommon.create_file(stamp_source, self.module_info)
+            create_file(stamp_source, self.module_info)
             ret = True
 
         if not ret:
@@ -134,13 +125,8 @@ class MMModule:
         return ret
 
     def __proc_depends(self):
-        dict_depends = {}
-        for (name, ver, repo) in self.module_depend:
-            # print("depend -> %s" % depend)
-            info = mmcommon.module_to_str(name, ver, repo)
-            dict_depends[info] = self.__get_depends(name, ver, repo)
-
-        self.__all_depends_dict[self.module_name] = dict_depends
+        param = (self.module_name, self.module_ver, self.module_repo_name)
+        self.__all_depends_dict[self.module_name] = self.__get_depends(*param)
         self.__depends_dict_to_list(self.__all_depends_dict, self.all_module_depend)
 
     def __depends_dict_to_list(self, depends_dict, depends_list):
@@ -171,24 +157,20 @@ class MMModule:
             else:
                 self.__show_map(base + '    ', v)
 
-    def __get_depends(self, name, ver, repo):
+    def __get_depends(self, name, ver, repo, dep_stack=[]):
         module_depend = {}
-        info = mmcommon.module_to_str(name, ver, repo)
-        if info in self.__depend_stack:
+        info = module_to_str(name, ver, repo)
+        if info in dep_stack:
             print("Error : depend come back to self: %s" % (info))
             return module_depend
-        self.__depend_stack.append(info)
-        module_config = get_module_config(module_dir)
+        dep_stack.append(info)
+        path = os.path.join(self.env.source_dir, module_to_dir(name, ver))
+        module_config = get_module_config(path, self.module_arch)
         depends = module_config.get_depend()
-        if len(depends) is 0:
-            # print("%s -> none " % module_name)
-            self.__depend_stack.pop()
-            return module_depend
         for depend in depends:
-            if depend != "":
-                # print("depend -> %s" % depend)
-                module_depend[depend] = self.__get_depends(depend)
-        self.__depend_stack.pop()
+            print("depend -> %s" % depend)
+            module_depend[module_to_str(*depend)] = self.__get_depends(*depend, dep_stack=dep_stack)
+        dep_stack.pop()
         return module_depend
 
 
@@ -222,28 +204,56 @@ class MMModule:
         config.show_values()
         config.save(path)
 
+    def get_source_list(self):
+        assert self.source_dir is not None
+        if not os.path.isdir(self.source_dir):
+            return []
+        source = self.module_config.get_source()
+        if source is 'all':
+            sources = find_source(self.env.src_suffixes, self.source_dir, recursive=True)
+        elif source is '':
+            sources = find_source(self.env.src_suffixes, self.source_dir)
+        else:
+            sources_count = len(source)
+            for index in xrange(sources_count):
+                source[index] = os.path.join(self.source_dir, source[index])
+        # print sources
+        # print("node = %s name = %s source = %s" % (module_node, name, source))
+        assert isinstance(source, list)
+        return source
+
+
     def DownloadFile(self, src, dst):
         # sys.stdout.write('\rFetching ' + name + '...\n')
         # urllib.urlretrieve(getFile, saveFile, reporthook=self.__report)
         # sys.stdout.write("\rDownload complete, saved as %s" % (fileName) + '\n\n')
         sys.stdout.flush()
 
-    def show_env(self):
+    def show(self):
         print("-" * 50)
         print("source dir : " + self.env.source_dir)
         print("depend %s " % self.module_depend)
-        self.module_config.show()
+        # self.module_config.show()
+        if self.__all_depends_dict is not None:
+            self.__show_map("", self.__all_depends_dict)
 
 
 if __name__ == "__main__":
     # mm_module = MMModule(name="sqlite3pp", source_dir="/work/com/zm")
     # mm_module.show_depends()
+
+    mm_module = MMModule("sqlite3")
+    mm_module.init_source()
+
     mm_module = MMModule("sqlite3pp")
     mm_module.init_source()
     mm_module.init_config()
-    mm_module.show_env()
+    mm_module.init_depend()
+    mm_module.show()
 
-    mm_module = MMModule()
+    mm_module = MMModule("abc")
     mm_module.init_source()
     mm_module.init_config()
-    mm_module.show_env()
+    mm_module.init_depend()
+    mm_module.show()
+

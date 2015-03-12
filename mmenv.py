@@ -35,6 +35,9 @@ class MMEnv:
         mmcommon.mkdir(self.build_dir)
         self.source_dir = self.__config.get_value("env.src_dir", "mm_source")
         mmcommon.mkdir(self.source_dir)
+        self.lib_dir = self.__config.get_value("env.lib_dir", "mm_lib")
+        mmcommon.mkdir(self.lib_dir)
+        self.src_suffixes = self.__config.get_split_value("env.src_suffixes")
 
         self.__repo_objs = []
         repos = self.__config.get_items("repo.dir")
@@ -51,6 +54,7 @@ class MMEnv:
         mm_lib_path = os.getenv('MM_LIB_PATH')
         if mm_lib_path is not None:
             self.__config.set_value("env.lib_dir", mm_lib_path)
+            self.lib_dir = mm_lib_path
 
         mm_repo_path = os.getenv('MM_REPO_LOCAL_PATH')
         if mm_repo_path is not None:

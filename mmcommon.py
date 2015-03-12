@@ -126,6 +126,16 @@ def read_file(path):
     return info
 
 
+def list_append(self, list, item):
+    if item is None:
+        return
+    if isinstance(item, tuple):
+        for value in item:
+            list.append(value)
+    else:
+        list.append(item)
+
+
 def find_source(suffixlist, path='.', recursive=False):
     """
 
@@ -188,7 +198,12 @@ def module_to_dir(name, ver):
 
 
 def module_to_str(name, ver, repo):
-    return name + ":" + ver + ":" + repo
+    _str = name
+    if repo is not "":
+        _str += repo + ":" + name
+    if ver is not "":
+        _str += ":" + ver
+    return _str
 
 
 class LRUCache:

@@ -108,6 +108,14 @@ class MMConfig:
             return defvalue
         return dict_node[""]
 
+    def get_split_value(self, node, sep=','):
+        value =  self.get_value(node, "")
+        value = value.strip()
+        if value is "":
+            return []
+        list_value = value.split(sep)
+        return list_value
+
     def save(self, path, node=""):
         config = MMConfigFile()
         dict_values = self.__to_dict_values(node)
