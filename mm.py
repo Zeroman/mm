@@ -27,13 +27,24 @@ def create_templete(args):
     for arg in args:
         param = "depend="
         if arg.startswith(param):
-            depend = arg[len(param):]
-            mmcfg.set_value(join_node("module.depend", depend, "ver"), "")
-            mmcfg.set_value(join_node("module.depend", depend, "repo"), "")
-        param = "inc_dir="
-        if arg.startswith(param):
-            inc_dir = arg[len(param):]
-            mmcfg.set_value("module.inc_dir", inc_dir)
+            values = arg[len(param):].split(",")
+            for depend in values:
+                if depend is '':
+                    continue
+                mmcfg.set_value(join_node("module.depend", depend, "ver"), "")
+                mmcfg.set_value(join_node("module.depend", depend, "repo"), "")
+
+        def add_param(node):
+            param = node + "="
+            if arg.startswith(param):
+                value = arg[len(param):]
+                mmcfg.set_value("module." + node, value)
+
+        add_param("inc_dir")
+        add_param("ccflags")
+        add_param("cxxflags")
+        add_param("linkflags")
+
     if path != '':
         if os.path.isdir(path):
             print("error " + path + " is dir.")

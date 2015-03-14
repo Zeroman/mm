@@ -12,10 +12,15 @@ import re
 MM_CONFIG = r'mm.cfg'
 MM_BUILD_CONFIG = r'mm_build.cfg'
 MM_STAMP_SOURCE = r'.stamp_source'
+MM_SOURCE_SUFFIXES = ['.c', 'cpp', 'hpp', 'cc']
 
 
 def default_arch():
     return platform.system().lower()
+
+
+def split_value(value, sep=','):
+    return filter(lambda x: x != "", map(lambda x: x.strip(), value.split(sep)))
 
 
 def join_node(*args):
@@ -126,17 +131,17 @@ def read_file(path):
     return info
 
 
-def list_append(self, list, item):
+def list_append(src_list, item):
     if item is None:
         return
-    if isinstance(item, tuple):
+    if isinstance(item, tuple) or isinstance(item, list):
         for value in item:
-            list.append(value)
+            src_list.append(value)
     else:
-        list.append(item)
+        src_list.append(item)
 
 
-def find_source(suffixlist, path='.', recursive=False):
+def find_source(path, suffixlist=MM_SOURCE_SUFFIXES, recursive=False):
     """
 
     :rtype : list
@@ -194,13 +199,13 @@ def get_module_info(info):
 
 
 def module_to_dir(name, ver):
-    return os.path.join(name.replace(".", os.path.sep), ver)
+    return os.path.join(name.replace(":", os.path.sep), ver)
 
 
 def module_to_str(name, ver, repo):
     _str = name
     if repo is not "":
-        _str += repo + ":" + name
+        _str = repo + ":" + name
     if ver is not "":
         _str += ":" + ver
     return _str
@@ -232,5 +237,10 @@ if __name__ == "__main__":
     modules = find_module_config("/work/com/mm/test_repo1")
     for m in modules:
         print m
+    print(split_value(",,,,,,,"))
+    print(split_value(",      ,    ,  ,  ,"))
+    print(split_value("a,b"))
+    print(split_value("a,, , , ,       b"))
+    print(split_value("a,b,"))
 
 

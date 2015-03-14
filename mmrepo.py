@@ -35,15 +35,19 @@ def mm_module_copy(module_path, dest_path):
     print("pull module path is " + dest_path)
     mm_cfg = os.path.join(module_path, mmcommon.MM_CONFIG)
     mmcommon.copy_file(mm_cfg, os.path.join(dest_path, mmcommon.MM_CONFIG))
-    src_dir = os.path.join(module_path, module_config.get_source_dir())
+    sources = module_config.get_source_list()
+    for src in sources:
+        mmcommon.copy_file(os.path.join(module_path, src), os.path.join(dest_path, src))
     # print("pull " + src_dir)
-    mmcommon.copy_dir(src_dir, dest_path)
-    inc_dir = os.path.join(module_path, module_config.get_include_dir())
-    mmcommon.copy_dir(inc_dir, dest_path)
-    lib_dir = os.path.join(module_path, module_config.get_lib_dir())
-    mmcommon.copy_dir(lib_dir, dest_path)
-    test_dir = os.path.join(module_path, module_config.get_test_dir())
-    mmcommon.copy_dir(test_dir, dest_path)
+    inc_dir_list = module_config.get_include_dir()
+    for dir in inc_dir_list:
+        mmcommon.copy_dir(os.path.join(module_path, dir), dest_path)
+    lib_dir_list = module_config.get_lib_dir()
+    for dir in lib_dir_list:
+        mmcommon.copy_dir(os.path.join(module_path, dir), dest_path)
+    test_dir_list = module_config.get_test_dir()
+    for dir in test_dir_list:
+        mmcommon.copy_dir(os.path.join(module_path, dir), dest_path)
 
 
 class MMDirRepo(MMRepo):

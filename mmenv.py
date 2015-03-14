@@ -62,6 +62,12 @@ class MMEnv:
             assert os.path.isdir(mm_repo_path)
             self.__repo_objs.append(mmrepo.MMDirRepo('env', mm_repo_path))
 
+
+    def set_arch(self, arch):
+        self.arch = arch
+        if arch == '':
+            self.arch = mmcommon.default_arch()
+
     def __add_cmd_param(self, param, add_param):
         return param + " " + add_param + " "
 
@@ -84,6 +90,7 @@ class MMEnv:
     def show(self):
         self.__config.show()
 
+global_env = MMEnv()
 
 if __name__ == "__main__":
     env = MMEnv()

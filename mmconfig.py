@@ -109,12 +109,8 @@ class MMConfig:
         return dict_node[""]
 
     def get_split_value(self, node, sep=','):
-        value =  self.get_value(node, "")
-        value = value.strip()
-        if value is "":
-            return []
-        list_value = value.split(sep)
-        return list_value
+        value = self.get_value(node, "")
+        return mmcommon.split_value(value, sep)
 
     def save(self, path, node=""):
         config = MMConfigFile()
@@ -199,6 +195,9 @@ class MMConfig:
                     self.__show(base + '    ', v)
 
     def set_value(self, node, value):
+        if isinstance(value, list):
+            print value
+            value = ",".join(value)
         self.__set_value(node.split('.'), value, self.dict_configs)
 
 
@@ -212,7 +211,7 @@ if __name__ == "__main__":
     mm.set_value("set.s", 1)
     mm.set_value("set.r", 2)
     mm.show()
-    mm.add_node_dict("set.t", {"":3})
+    mm.add_node_dict("set.t", {"": 3})
     mm.show()
     mm.move_node("set", "test.move.set")
     mm.show()

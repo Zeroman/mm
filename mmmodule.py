@@ -13,37 +13,31 @@ config_cache = LRUCache(100)
 module_cache = LRUCache(100)
 
 
-def get_module_config(module_dir, module_arch):
+def get_module_config(module_dir):
     assert os.path.exists(module_dir)
 
     config = config_cache.get(module_dir)
     if config is not None:
         return config
 
-    module_config = mmmodconfig.MMModConfig(module_dir, module_arch)
+    module_config = mmmodconfig.MMModConfig(module_dir)
     config_cache.set(module_dir, module_config)
     return module_config
 
 
-def get_module(name='', ver='', repo='', arch='', env=None):
+def get_module(name='', ver='', repo=''):
     info = module_to_str(name, ver, repo)
     module = module_cache.get(info)
     if module is not None:
         return module
-    module = MMModule(name, ver, repo, arch, env)
+    module = MMModule(name, ver, repo)
     module_cache.set(info, module)
     return module
 
 
 class MMModule:
-    def __init__(self, name='', ver='', repo='', arch='', env=None):
-        self.env = env
-        if self.env is None:
-            self.env = mmenv.MMEnv()
+    def __init__(self, name='', ver='', repo=''):
 
-        self.module_arch = arch
-        if arch == '':
-            self.module_arch = default_arch()
 
         self.module_name = name
         self.module_ver = ver
@@ -56,54 +50,62 @@ class MMModule:
             self.module_dir = ''
         else:
             self.module_repo = self.__find_module_repo(repo)
-            self.module_repo_name = self.module_repo.get_name()
             assert self.module_repo is not None
+            self.module_repo_name = self.module_repo.get_name()
             self.module_dir = module_to_dir(self.module_name, self.module_ver)
-            self.module_path = os.path.join(self.env.source_dir, self.module_dir)
+            self.module_path = os.path.join(mmenv.global_env.source_dir, self.module_dir)
         self.module_info = module_to_str(self.module_name, self.module_ver, self.module_repo_name)
 
         self.module_depend = []
 
-        self.source_dir = None
-        self.lib_dir = None
-        self.install_lib_dir = None
-
+        self.source_info = []
         self.inc_dir = []
-        self.dep_inc_dir = []
+        self.lib_dir = []
         self.ccflags = []
-        self.dep_ccflags = []
         self.cxxflags = []
-        self.dep_cxxflags = []
         self.linkflags = []
+        self.dep_inc_dir = []
+        self.dep_ccflags = []
+        self.dep_cxxflags = []
         self.dep_linkflags = []
 
         self.__all_depends_dict = None
         self.all_module_depend = []
 
     def __find_module_repo(self, name):
-        for repo in self.env.get_repo():
+        for repo in mmenv.global_env.get_repo():
             # print("find module " + module_name + " in " + repo.get_name())
             if name is not '' and repo.get_name() != name:
                 continue
             if repo.have_module(self.module_name, self.module_ver):
                 return repo
+        print("can't find module " + self.module_name)
         return None
 
     def __str__(self):
         return "<" + self.module_info + ">"
 
-
     def init_config(self):
-        self.module_config = get_module_config(self.module_path, self.module_arch)
+        self.module_config = get_module_config(self.module_path)
         self.module_depend = self.module_config.get_depend()
-        self.source_dir = self.module_config.get_source_dir()
+        self.source_info = self.module_config.get_source_info()
         self.lib_dir = self.module_config.get_lib_dir()
-        self.install_lib_dir = self.env.lib_dir
+        self.inc_dir = self.module_config.get_include_dir()
+        self.ccflags = self.module_config.get_ccflags()
+        self.cxxflags = self.module_config.get_cxxflags()
+        self.linkflags = self.module_config.get_linkflags()
 
     def init_depend(self):
         self.all_module_depend = []
         self.__all_depends_dict = {}
         self.__proc_depends()
+        for (name, ver, repo) in self.all_module_depend:
+            path = os.path.join(mmenv.global_env.source_dir, module_to_dir(name, ver))
+            module_config = get_module_config(path)
+            self.dep_inc_dir += module_config.get_include_dir()
+            self.dep_ccflags += module_config.get_ccflags()
+            self.dep_cxxflags += module_config.get_cxxflags()
+            self.dep_linkflags += module_config.get_linkflags()
 
     def init_source(self):
         if self.module_repo is None:
@@ -116,7 +118,7 @@ class MMModule:
             if info == self.module_info:
                 return True
 
-        if self.module_repo.pull_module(self.env.source_dir, self.module_name, self.module_ver):
+        if self.module_repo.pull_module(mmenv.global_env.source_dir, self.module_name, self.module_ver):
             create_file(stamp_source, self.module_info)
             ret = True
 
@@ -124,9 +126,10 @@ class MMModule:
             print("Cann't find module " + self.module_info)
         return ret
 
+
     def __proc_depends(self):
         param = (self.module_name, self.module_ver, self.module_repo_name)
-        self.__all_depends_dict[self.module_name] = self.__get_depends(*param)
+        self.__all_depends_dict[param] = self.__get_depends(param)
         self.__depends_dict_to_list(self.__all_depends_dict, self.all_module_depend)
 
     def __depends_dict_to_list(self, depends_dict, depends_list):
@@ -148,7 +151,7 @@ class MMModule:
             if len(items) == 1:
                 (ik, iv) = items[0]
                 if not iv.items():
-                    sys.stdout.write('->%s' % ik)
+                    # sys.stdout.write('->%s' % ik)
                     sys.stdout.write('\n')
                     continue
             sys.stdout.write('\n')
@@ -157,19 +160,19 @@ class MMModule:
             else:
                 self.__show_map(base + '    ', v)
 
-    def __get_depends(self, name, ver, repo, dep_stack=[]):
+    def __get_depends(self, module, dep_stack=[]):
         module_depend = {}
+        (name, ver, repo) = module
         info = module_to_str(name, ver, repo)
         if info in dep_stack:
             print("Error : depend come back to self: %s" % (info))
             return module_depend
         dep_stack.append(info)
-        path = os.path.join(self.env.source_dir, module_to_dir(name, ver))
-        module_config = get_module_config(path, self.module_arch)
+        path = os.path.join(mmenv.global_env.source_dir, module_to_dir(name, ver))
+        module_config = get_module_config(path)
         depends = module_config.get_depend()
         for depend in depends:
-            print("depend -> %s" % depend)
-            module_depend[module_to_str(*depend)] = self.__get_depends(*depend, dep_stack=dep_stack)
+            module_depend[depend] = self.__get_depends(depend, dep_stack=dep_stack)
         dep_stack.pop()
         return module_depend
 
@@ -197,30 +200,15 @@ class MMModule:
 
     def save_module_config(self, path):
         config = mmconfig.MMConfig()
+        config.set_value("module.ccflags", self.ccflags + self.dep_ccflags)
+        config.set_value("module.cxxflags", self.cxxflags + self.dep_cxxflags)
+        config.set_value("module.linkflags", self.linkflags + self.dep_linkflags)
         # config.set_node_dict("env", self.module_config.get_node_dict("env"))
         # node = join_node("module", "depend")
         # config.set_node_dict(node, self.module_config.get_node_dict(node))
         # config.show()
         config.show_values()
         config.save(path)
-
-    def get_source_list(self):
-        assert self.source_dir is not None
-        if not os.path.isdir(self.source_dir):
-            return []
-        source = self.module_config.get_source()
-        if source is 'all':
-            sources = find_source(self.env.src_suffixes, self.source_dir, recursive=True)
-        elif source is '':
-            sources = find_source(self.env.src_suffixes, self.source_dir)
-        else:
-            sources_count = len(source)
-            for index in xrange(sources_count):
-                source[index] = os.path.join(self.source_dir, source[index])
-        # print sources
-        # print("node = %s name = %s source = %s" % (module_node, name, source))
-        assert isinstance(source, list)
-        return source
 
 
     def DownloadFile(self, src, dst):
@@ -231,19 +219,35 @@ class MMModule:
 
     def show(self):
         print("-" * 50)
-        print("source dir : " + self.env.source_dir)
+        print("source dir : " + mmenv.global_env.source_dir)
         print("depend %s " % self.module_depend)
         # self.module_config.show()
+        print("all depend list is %s " % self.all_module_depend)
         if self.__all_depends_dict is not None:
             self.__show_map("", self.__all_depends_dict)
+        print("ccflags = %s" % self.ccflags)
+        print("cxxflags = %s" % self.cxxflags)
+        print("linkflags = %s" % self.linkflags)
+        print("dep_ccflags = %s" % self.dep_ccflags)
+        print("dep_cxxflags = %s" % self.dep_cxxflags)
+        print("dep_linkflags = %s" % self.dep_linkflags)
 
 
 if __name__ == "__main__":
+    def init_all_source(name, ver='', repo=''):
+        module = MMModule(name, ver, repo)
+        module.init_source()
+        module.init_config()
+        for dep_info in module.module_depend:
+            init_all_source(*dep_info)
+
     # mm_module = MMModule(name="sqlite3pp", source_dir="/work/com/zm")
     # mm_module.show_depends()
 
     mm_module = MMModule("sqlite3")
     mm_module.init_source()
+    mm_module.init_config()
+    print(">>sources = %s" % mm_module.module_config.get_source_list())
 
     mm_module = MMModule("sqlite3pp")
     mm_module.init_source()
@@ -251,9 +255,12 @@ if __name__ == "__main__":
     mm_module.init_depend()
     mm_module.show()
 
-    mm_module = MMModule("abc")
+    name = 'abc_ab_bc_x_y_z_a#x'
+    init_all_source(name)
+    mm_module = MMModule(name)
     mm_module.init_source()
     mm_module.init_config()
     mm_module.init_depend()
+    mm_module.save_module_config("/tmp/mm_build.cfg")
     mm_module.show()
 
