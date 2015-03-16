@@ -1,0 +1,59 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import os
+import mmenv
+import mmmodule
+from mmcommon import *
+
+def build_module(module, env):
+    source = module.module_config.get_source_list()
+    source_count = len(source)
+    if source_count == 0:
+        print("%s source in none" % module.module_name)
+        return
+    print source
+    # print("node = %s name = %s source = %s" % (module_node, name, source))
+    list_inc = []
+    list_append(list_inc, module.inc_dir)
+    list_append(list_inc, module.dep_inc_dir)
+
+    list_ccflags = []
+    list_append(list_inc, module.ccflags)
+    list_append(list_inc, module.dep_ccflags)
+
+    list_cxxflags = []
+    list_append(list_inc, module.cxxflags)
+    list_append(list_inc, module.dep_cxxflags)
+
+    list_linkflags = []
+    list_append(list_inc, module.linkflags)
+    list_append(list_inc, module.dep_linkflags)
+
+    args_dict = {}
+    args_dict["CPPPATH"] = list_inc
+    args_dict["CCFLAGS"] = list_ccflags
+    args_dict["CXXFLAGS"] = list_cxxflags
+    args_dict["LINKFLAGS"] = list_linkflags
+    print(args_dict)
+
+    lib_name = os.path.join(mmenv.global_env.lib_dir, module.module_name)
+    sharelib = env.SharedLibrary(target=lib_name, source=source, **args_dict)
+    staticlib = env.StaticLibrary(target=lib_name, source=source, **args_dict)
+
+    for (name, ver, repo) in module.module_depend:
+        current_module = mmmodule.get_module(name, ver, repo)
+        dir = module_to_dir(current_module.module_name, current_module.module_ver)
+        build_dir = os.path.join(mmenv.global_env.build_dir, dir)
+        os.chdir(current_module.module_path)
+        [dep_sharelib, dep_staticlib] = SConscript(mmenv.global_env.build_module_script, exports=["current_module", "env"], src_dir=current_module.module_path, varient_dir=build_dir)
+        env.Depends(sharelib, dep_sharelib)
+        env.Depends(staticlib, dep_staticlib)
+
+    return [sharelib, staticlib]
+
+Import("env")
+Import("current_module")
+print(">>>>>>>>>>>>>>>>>" + os.getcwd())
+module_libs = build_module(current_module, env)
+Return("module_libs")
