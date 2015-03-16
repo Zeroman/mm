@@ -36,6 +36,7 @@ def mm_module_copy(module_path, dest_path):
     mm_cfg = os.path.join(module_path, mmcommon.MM_CONFIG)
     mmcommon.copy_file(mm_cfg, os.path.join(dest_path, mmcommon.MM_CONFIG))
     sources = module_config.get_source_list()
+    print sources,"----------------------------"
     for src in sources:
         mmcommon.copy_file(os.path.join(module_path, src), os.path.join(dest_path, src))
     # print("pull " + src_dir)

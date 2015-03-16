@@ -14,7 +14,6 @@ module_cache = LRUCache(100)
 
 
 def get_module_config(module_dir):
-    print(">>>>>>>>>>>>>", module_dir)
     assert os.path.exists(module_dir)
 
     config = config_cache.get(module_dir)
@@ -73,7 +72,8 @@ class MMModule:
 
     def __find_module_repo(self, name):
         for repo in mmenv.global_env.get_repo():
-            # print("find module " + module_name + " in " + repo.get_name())
+            info = "%s:%s" % (self.module_name, self.module_ver)
+            print("find module " + info + " in " + repo.get_name())
             if name is not '' and repo.get_name() != name:
                 continue
             if repo.have_module(self.module_name, self.module_ver):

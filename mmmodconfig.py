@@ -97,6 +97,8 @@ class MMModConfig:
     def __get_source_list(self, src_type, src_param):
         sources = []
         str_len = len(self.__module_src)
+        if self.__module_src[-1] is not '/':
+            str_len += 1
         if src_type == 'rec':
             dir = os.path.join(self.__module_src, src_param)
             sources = find_source(dir, mmenv.global_env.src_suffixes, recursive=True)
