@@ -86,23 +86,26 @@ class MMModule:
         return "<" + self.module_info + ">"
 
     def init_config(self):
+        dir = module_to_dir(self.module_name, self.module_ver)
         self.module_config = get_module_config(self.module_path)
         self.module_depend = self.module_config.get_depend()
         self.source_info = self.module_config.get_source_info()
         self.lib_dir = self.module_config.get_lib_dir()
-        self.inc_dir = self.module_config.get_include_dir()
+        self.inc_dir = map(lambda x: os.path.join(dir, x), self.module_config.get_include_dir())
         self.ccflags = self.module_config.get_ccflags()
         self.cxxflags = self.module_config.get_cxxflags()
         self.linkflags = self.module_config.get_linkflags()
+        self.source_list = map(lambda x: os.path.join(dir, x), self.module_config.get_source_list())
 
     def init_depend(self):
         self.all_module_depend = []
         self.__all_depends_dict = {}
         self.__proc_depends()
-        for (name, ver, repo) in self.all_module_depend:
+        for (name, ver, repo) in self.all_module_depend[1:]:
             path = os.path.join(mmenv.global_env.source_dir, module_to_dir(name, ver))
             module_config = get_module_config(path)
-            self.dep_inc_dir += module_config.get_include_dir()
+            dir = module_to_dir(name, ver)
+            self.dep_inc_dir += map(lambda x: os.path.join(dir, x), module_config.get_include_dir())
             self.dep_ccflags += module_config.get_ccflags()
             self.dep_cxxflags += module_config.get_cxxflags()
             self.dep_linkflags += module_config.get_linkflags()

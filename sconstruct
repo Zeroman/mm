@@ -3,7 +3,6 @@
 
 import os
 
-import mmconfig
 import mmenv
 import mmmodule
 from mmcommon import *
@@ -15,235 +14,6 @@ mm_module_arch = ARGUMENTS.get('arch', '')
 
 def get_module(name, ver, repo):
     return mmmodule.get_module(name, ver, repo)
-
-
-class MMBuilder:
-    def __init__(self, env, config_path):
-        self.env = env
-        self.__config = mmconfig.MMConfig()
-        self.__config.read_config(config_path)
-
-        self.arch = self.get_env("module.arch")
-
-        self.__init_arch()
-        self.module_name = self.get_env("module.name")
-        self.dep_modules = self.get_env_list('module.depend', [])
-        self.libs_dir = self.get_env("env.libs_dir")
-        assert self.libs_dir is not None
-        self.libs_dir = os.path.join(self.libs_dir, self.arch)
-        self.list_dep_inc = self.get_depend_module_dir()
-        self.build_dir = os.path.join(self.get_env("env.build_dir"), self.module_name, self.arch)
-        if self.build_dir is not None:
-            VariantDir(self.build_dir, ".", duplicate=0)
-        self.share_libs = []
-        self.static_libs = []
-        self.dict_targets = {}
-        self.install_dir = self.get_env("module.install_dir")
-
-        ccflags = self.get_env("module." + self.arch + ".CCFLAGS")
-        if ccflags is not None:
-            self.env.Append(CCFLAGS=ccflags)
-        cxxflags = self.get_env("module." + self.arch + ".CXXFLAGS")
-        if cxxflags is not None:
-            self.env.Append(CXXFLAGS=cxxflags)
-        linkflags = self.get_env("module." + self.arch + ".LINKFLAGS")
-        if linkflags is not None:
-            self.env.Append(LINKFLAGS=cxxflags)
-        libs = self.get_env_list("module." + self.arch + ".LIBS")
-        if libs is not None:
-            self.env.Append(LIBS=libs)
-            # print("LIBS = " + env.Dump('LIBS'))
-
-        self.local_libs = []
-        local_libs_dir = os.path.join("lib", self.arch)
-        if os.path.isdir(local_libs_dir):
-            self.local_libs = mm.find_source([], local_libs_dir)
-
-        self.depend_lib_files = self.__init_depend_lib_files()
-
-    def install(self):
-        target = []
-        if self.install_dir is not None:
-            target.append(self.env.Install(self.install_dir, self.static_libs))
-            target.append(self.env.Install(self.install_dir, self.share_libs))
-        return target
-
-    def get_env_list(self, env_name, default=None):
-        value = self.__config.get_value(env_name, None)
-        if value is None or value is "":
-            return default
-        return value.split(',')
-
-    def get_env(self, env_name):
-        return self.__config.get_value(env_name, None)
-
-
-    def get_mm_module_name(self, module_node):
-        name = self.get_env(module_node + '.name')
-        if name is None:
-            name = module_node.split('.')[-1]
-        return name
-
-
-    def get_depend_module_dir(self):
-        inc_dir = []
-        # print self.dep_modules
-        for submodule in self.dep_modules:
-            node = 'module.depend.' + submodule
-            dirs = self.get_env_list(node + '.inc_dir')
-            if dirs is None:
-                continue
-            for dir in dirs:
-                inc_dir.append(dir)
-        return inc_dir
-
-    def get_node_sources(self, node):
-        name = self.get_mm_module_name(node)
-        sources = self.get_env_list(node + '.sources', [])
-        if 'none' in sources:
-            return []
-        src_dir = self.get_env(node + '.src_dir')
-        if src_dir is None:
-            src_dir = "src"
-        if not os.path.isdir(src_dir):
-            return []
-        if 'all' in sources:
-            sources = mm.find_source(self.get_env_list('env.src_suffixes'), src_dir, recursive=True)
-        elif len(sources) is 0:
-            sources = mm.find_source(self.get_env_list('env.src_suffixes'), src_dir)
-        else:
-            sources_count = len(sources)
-            for index in xrange(sources_count):
-                sources[index] = os.path.join(src_dir, sources[index])
-        # print sources
-        # print("node = %s name = %s source = %s" % (module_node, name, source))
-        assert isinstance(sources, list)
-        return sources
-
-    def get_node_inc_dir(self, node):
-        inc_dir = self.get_env_list(node + ".inc_dir")
-        if inc_dir is None:
-            inc_dir = []
-            if os.path.isdir('include'):
-                inc_dir = ["include"]
-        return inc_dir
-
-    def get_node_src_dir(self, node):
-        dir = self.get_env_list(node + ".src_dir")
-        if dir is None:
-            if os.path.isdir('src'):
-                dir = "src"
-        return dir
-
-
-    def build_module_node(self, module_node):
-        sources = self.get_node_sources(module_node)
-        sources_count = len(sources)
-        if sources_count == 0:
-            return
-        for index in xrange(sources_count):
-            sources[index] = os.path.join(self.build_dir, sources[index])
-        # print sources
-        # print("node = %s name = %s source = %s" % (module_node, name, source))
-        list_inc = []
-        self.list_append(list_inc, self.get_node_inc_dir(module_node))
-        self.list_append(list_inc, self.get_node_src_dir(module_node))
-        self.list_append(list_inc, self.list_dep_inc)
-        self.list_append(list_inc, self.get_env_list(module_node + ".build.inc_dir"))
-        name = self.get_mm_module_name(module_node)
-        lib_name = os.path.join(self.libs_dir, name)
-        sharelib = self.env.SharedLibrary(target=lib_name, source=sources, CPPPATH=list_inc)
-        staticlib = self.env.StaticLibrary(target=lib_name, source=sources, CPPPATH=list_inc)
-        self.share_libs.append(sharelib)
-        self.static_libs.append(staticlib)
-        self.dict_targets[name] = [staticlib, sharelib]
-
-    def build_module(self):
-        target = []
-        submodules = self.get_env_list('module.sub')
-        if submodules is not None:
-            for submodule in submodules:
-                node = 'module.sub.' + submodule
-                self.build_module_node(node)
-                depend = self.get_env(node + '.depend')
-                if depend is not None:
-                    print("---Depend = " + depend)
-                    self.env.Depends(self.dict_targets[submodule], self.dict_targets[depend])
-        self.build_module_node('module')
-        for lib in self.share_libs:
-            target.append(lib)
-        for lib in self.static_libs:
-            target.append(lib)
-        return target
-
-    def copy_locallibs(self):
-        target = []
-        local_libs_dir = os.path.join("lib", self.arch)
-        if os.path.isdir(local_libs_dir):
-            for lib in self.local_libs:
-                target.append(self.env.Install(self.libs_dir, lib))
-        return target
-
-    def __init_arch(self):
-        arch_node = 'arch.' + self.arch
-        env_cc = self.get_env(arch_node + ".CC")
-        if env_cc is not None:
-            self.env['CC'] = env_cc
-        env_cxx = self.get_env(arch_node + ".CXX")
-        if env_cxx is not None:
-            self.env['CXX'] = env_cxx
-        env_ccflags = self.get_env(arch_node + ".CCFLAGS")
-        if env_ccflags is not None:
-            self.env.Append(CCFLAGS=env_ccflags)
-        env_cxxflags = self.get_env(arch_node + ".CXXFLAGS")
-        if env_cxxflags is not None:
-            self.env.Append(CXXFLAGS=env_cxxflags)
-        env_linkflags = self.get_env(arch_node + ".LINKFLAGS")
-        if env_linkflags is not None:
-            self.env.Append(LINKFLAGS=env_linkflags)
-
-    def dump(self):
-        print self.env.Dump("CCFLAGS")
-        print self.env.Dump("CXXFLAGS")
-        print self.env.Dump("SHLINKFLAGS")
-
-    def __init_depend_lib_files(self):
-        libs = []
-        for module in self.dep_modules:
-            # print 'module = %s' % module
-            sharelib_name = self.env['LIBPREFIX'] + module + self.env['SHLIBSUFFIX']
-            libs.append(os.path.join(self.libs_dir, sharelib_name))
-            static_name = self.env['LIBPREFIX'] + module + self.env['LIBSUFFIX']
-            libs.append(os.path.join(self.libs_dir, static_name))
-        return libs
-
-    def packall(self):
-        zip_dir = os.path.join(self.build_dir, "zip")
-        self.env.Accumulate(zip_dir, self.list_dep_inc)
-        zip_libdir = os.path.join(zip_dir, "lib")
-        self.env.Accumulate(zip_libdir, self.local_libs)
-        self.env.Accumulate(zip_libdir, self.depend_lib_files)
-        zip_path = os.path.join(self.build_dir, self.module_name + "_all")
-        zipall = self.env.Zipper(zip_path, zip_dir)
-        return zipall
-
-    def build_example(self):
-        target = []
-        list_inc = []
-        sources = mm.find_source(self.get_env_list('env.src_suffixes'), 'example')
-        self.list_append(list_inc, self.list_dep_inc)
-        self.list_append(list_inc, self.get_node_inc_dir(self.module_name))
-        test_env = env.Clone()
-        test_env.Append(LIBS=self.dep_modules)
-        test_env.Append(LIBPATH=self.libs_dir)
-        test_env.Append(CPPPATH=list_inc)
-        test_env.Append(LINKFLAGS='-Wl,-rpath,' + self.libs_dir)
-        for src in sources:
-            bin = os.path.join(self.build_dir, os.path.splitext(src)[0])
-            src = os.path.join(self.build_dir, src)
-            example = test_env.Program(target=bin, source=src)
-            target.append(example)
-        return target
 
 
 def init_module(module, name_stack=[]):
@@ -260,32 +30,41 @@ def init_module(module, name_stack=[]):
     name_stack.pop()
 
 
-def build_module(module, build_dir, env):
-    print mmenv.global_env.build_dir, module.module_dir
-    source = module.module_config.get_source_list()
+def build_example(module):
+    pass
+
+
+def build_unittest(module):
+    pass
+
+
+def build_module(module, env):
+    module.init_depend()
+    source = module.source_list
     source_count = len(source)
     if source_count == 0:
         print("%s source in none" % module.module_name)
         return
-    for index in xrange(source_count):
-        source[index] = os.path.join(build_dir, source[index])
-    # print sources
+
+    print source
+    # print(">>>>>>>>>>>>", module.module_name, module.inc_dir)
+    # print(">>>>>>>>>>>>", module.module_name, module.dep_inc_dir)
     # print("node = %s name = %s source = %s" % (module_node, name, source))
     list_inc = []
     list_append(list_inc, module.inc_dir)
     list_append(list_inc, module.dep_inc_dir)
 
     list_ccflags = []
-    list_append(list_inc, module.ccflags)
-    list_append(list_inc, module.dep_ccflags)
+    list_append(list_ccflags, module.ccflags)
+    list_append(list_ccflags, module.dep_ccflags)
 
     list_cxxflags = []
-    list_append(list_inc, module.cxxflags)
-    list_append(list_inc, module.dep_cxxflags)
+    list_append(list_cxxflags, module.cxxflags)
+    list_append(list_cxxflags, module.dep_cxxflags)
 
     list_linkflags = []
-    list_append(list_inc, module.linkflags)
-    list_append(list_inc, module.dep_linkflags)
+    list_append(list_linkflags, module.linkflags)
+    list_append(list_linkflags, module.dep_linkflags)
 
     args_dict = {}
     args_dict["CPPPATH"] = list_inc
@@ -297,15 +76,14 @@ def build_module(module, build_dir, env):
     lib_name = os.path.join(mmenv.global_env.lib_dir, module.module_name)
     sharelib = env.SharedLibrary(target=lib_name, source=source, **args_dict)
     staticlib = env.StaticLibrary(target=lib_name, source=source, **args_dict)
+
+    for (name, ver, repo) in module.module_depend:
+        dep_module = mmmodule.get_module(name, ver, repo)
+        [dep_sharelib, dep_staticlib] = build_module(dep_module, env)
+        env.Depends(sharelib, dep_sharelib)
+        env.Depends(staticlib, dep_staticlib)
+
     return [sharelib, staticlib]
-
-
-def build_example(module):
-    pass
-
-
-def build_unittest(module):
-    pass
 
 
 env = Environment(tools=['default', TOOL_ADD_HEADER])
@@ -323,10 +101,12 @@ current_module = get_module(name, ver, repo)
 # if name is '':
 module_build_dir = os.path.join(mmenv.global_env.build_dir, module_to_dir(name, ver))
 print(module_build_dir, current_module.module_path)
-env.VariantDir(module_build_dir, current_module.module_path, duplicate=0)
+# env.VariantDir(module_build_dir, current_module.module_path, duplicate=0)
 env.SConsignFile(os.path.join(mmenv.global_env.build_dir, ".sconsign.dblite"))
 init_module(current_module)
-lib = build_module(current_module, module_build_dir, env)
+
+env.Repository(mmenv.global_env.source_dir)
+lib = build_module(current_module, env)
 env.Default(lib)
 
 if False:

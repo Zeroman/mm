@@ -12,6 +12,7 @@ class MMEnv:
         self.__config_path = []
 
         self.mm_path = os.path.dirname(os.path.realpath(__file__))
+        self.build_module_script = os.path.join(self.mm_path, "build_module.py")
         self.__config = mmconfig.MMConfig()
 
         self.scons_path = self.__config.get_value("scons.path", mmcommon.find_file("scons"))

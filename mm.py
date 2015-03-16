@@ -86,7 +86,21 @@ if __name__ == "__main__":
             sys.argv.remove(param)
             sys.argv.append(map_argv[param])
 
-    mm_env = mmenv.MMEnv()
+    env = mmenv.global_env
+    build_dir = env.build_dir
+
+    try:
+        i = sys.argv.index('-C')
+        if i + 1 == len(sys.argv):
+            print("param error")
+            sys.exit(1)
+        build_dir = sys.argv[i + 1]
+    except ValueError:
+        print("param error")
+        sys.exit(1)
+
+    if not os.path.isdir(build_dir):
+        mkdir(build_dir)
+    env.build_module(build_dir, " ".join(sys.argv[1:]))
     # mm_env.show()
-    mm_env.build_module(os.getcwd(), " ".join(sys.argv[1:]))
 
