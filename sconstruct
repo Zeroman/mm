@@ -53,7 +53,6 @@ def build_module(module, env):
     list_inc = []
     list_append(list_inc, module.inc_dir)
     list_append(list_inc, module.dep_inc_dir)
-    print(".........", module.inc_dir, list_inc)
 
     list_ccflags = []
     list_append(list_ccflags, module.ccflags)
@@ -103,7 +102,7 @@ pwd = ARGUMENTS.get('pwd', '')
 path = ''
 if name is '':
     path = pwd
-    env.Repository(path)
+    env.Repository(os.path.normpath(os.path.join(path, os.path.pardir)))
 current_module = get_module(name, ver, repo, path)
 module_build_dir = os.path.join(mmenv.global_env.build_dir, module_to_dir(name, ver))
 print(module_build_dir, current_module.module_path)

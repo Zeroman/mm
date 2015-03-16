@@ -95,13 +95,8 @@ class MMModule:
         self.linkflags = self.module_config.get_linkflags()
         inc_dir = self.module_config.get_include_dir()
         source_list = self.module_config.get_source_list()
-        if self.module_repo is None:
-            print(">>>>>", inc_dir)
-            self.inc_dir = inc_dir
-            self.source_list = source_list
-        else:
-            self.inc_dir = map(lambda x: os.path.join(dir, x), inc_dir)
-            self.source_list = map(lambda x: os.path.join(dir, x), source_list)
+        self.inc_dir = map(lambda x: os.path.join(dir, x), inc_dir)
+        self.source_list = map(lambda x: os.path.join(dir, x), source_list)
 
     def init_depend(self):
         self.all_module_depend = []
