@@ -14,6 +14,7 @@ module_cache = LRUCache(100)
 
 
 def get_module_config(module_dir):
+    print(">>>>>>>>>>>>>", module_dir)
     assert os.path.exists(module_dir)
 
     config = config_cache.get(module_dir)
@@ -25,28 +26,26 @@ def get_module_config(module_dir):
     return module_config
 
 
-def get_module(name='', ver='', repo=''):
+def get_module(name='', ver='', repo='', path=''):
     info = module_to_str(name, ver, repo)
     module = module_cache.get(info)
     if module is not None:
         return module
-    module = MMModule(name, ver, repo)
+    module = MMModule(name, ver, repo, path)
     module_cache.set(info, module)
     return module
 
 
 class MMModule:
-    def __init__(self, name='', ver='', repo=''):
-
-
+    def __init__(self, name='', ver='', repo='', path=''):
+        assert not (path == '' and name == '')
         self.module_name = name
         self.module_ver = ver
         self.module_repo_name = ""
-        if self.module_name is '':
-            curpath = os.getcwd()
-            self.module_name = os.path.basename(curpath)
+        if path is not '':
+            self.module_name = os.path.basename(path)
             self.module_repo = None
-            self.module_path = curpath
+            self.module_path = path
             self.module_dir = ''
         else:
             self.module_repo = self.__find_module_repo(repo)
@@ -91,11 +90,18 @@ class MMModule:
         self.module_depend = self.module_config.get_depend()
         self.source_info = self.module_config.get_source_info()
         self.lib_dir = self.module_config.get_lib_dir()
-        self.inc_dir = map(lambda x: os.path.join(dir, x), self.module_config.get_include_dir())
         self.ccflags = self.module_config.get_ccflags()
         self.cxxflags = self.module_config.get_cxxflags()
         self.linkflags = self.module_config.get_linkflags()
-        self.source_list = map(lambda x: os.path.join(dir, x), self.module_config.get_source_list())
+        inc_dir = self.module_config.get_include_dir()
+        source_list = self.module_config.get_source_list()
+        if self.module_repo is None:
+            print(">>>>>", inc_dir)
+            self.inc_dir = inc_dir
+            self.source_list = source_list
+        else:
+            self.inc_dir = map(lambda x: os.path.join(dir, x), inc_dir)
+            self.source_list = map(lambda x: os.path.join(dir, x), source_list)
 
     def init_depend(self):
         self.all_module_depend = []
@@ -131,8 +137,11 @@ class MMModule:
 
 
     def __proc_depends(self):
-        param = (self.module_name, self.module_ver, self.module_repo_name)
-        self.__all_depends_dict[param] = self.__get_depends(param)
+        # param = (self.module_name, self.module_ver, self.module_repo_name)
+        # self.__all_depends_dict[param] = self.__get_depends(param)
+        dep_stack = [self.module_info]
+        for depend in self.module_depend:
+            self.__all_depends_dict[depend] = self.__get_depends(depend, dep_stack=dep_stack)
         self.__depends_dict_to_list(self.__all_depends_dict, self.all_module_depend)
 
     def __depends_dict_to_list(self, depends_dict, depends_list):
@@ -265,5 +274,11 @@ if __name__ == "__main__":
     mm_module.init_config()
     mm_module.init_depend()
     mm_module.save_module_config("/tmp/mm_build.cfg")
+    mm_module.show()
+
+    mm_module = MMModule(path="/work/com/zm/sqlite3pp")
+    mm_module.init_source()
+    mm_module.init_config()
+    mm_module.init_depend()
     mm_module.show()
 

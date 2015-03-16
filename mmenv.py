@@ -80,6 +80,7 @@ class MMEnv:
         # os.system(self.scons_path + self.scons_param + " --random --tree=all")
         scons_param = self.__add_cmd_param(self.scons_param, "-f " + self.scons_script)
         scons_param = self.__add_cmd_param(scons_param, argv)
+        scons_param = self.__add_cmd_param(scons_param, "pwd=" + os.getcwd())
         os.chdir(path)
         ret = os.system(self.scons_path + scons_param)
         # print (" ret = %d" % ret)
@@ -90,6 +91,7 @@ class MMEnv:
 
     def show(self):
         self.__config.show()
+
 
 global_env = MMEnv()
 

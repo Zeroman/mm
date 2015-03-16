@@ -12,8 +12,8 @@ global mm_module_arch
 mm_module_arch = ARGUMENTS.get('arch', '')
 
 
-def get_module(name, ver, repo):
-    return mmmodule.get_module(name, ver, repo)
+def get_module(name, ver, repo, path=''):
+    return mmmodule.get_module(name, ver, repo, path)
 
 
 def init_module(module, name_stack=[]):
@@ -43,7 +43,7 @@ def build_module(module, env):
     source = module.source_list
     source_count = len(source)
     if source_count == 0:
-        print("%s source in none" % module.module_name)
+        print("%s source is none." % module.module_name)
         return
 
     print source
@@ -53,6 +53,7 @@ def build_module(module, env):
     list_inc = []
     list_append(list_inc, module.inc_dir)
     list_append(list_inc, module.dep_inc_dir)
+    print(".........", module.inc_dir, list_inc)
 
     list_ccflags = []
     list_append(list_ccflags, module.ccflags)
@@ -87,6 +88,7 @@ def build_module(module, env):
 
 
 env = Environment(tools=['default', TOOL_ADD_HEADER])
+env.Repository(mmenv.global_env.source_dir)
 # env.VariantDir(mmenv.global_env.build_dir, mmenv.global_env.source_dir, duplicate=0)
 # env['CCCOMSTR'] = "Compiling $TARGET"
 # env['CXXCOMSTR'] = "Compiling $TARGET"
@@ -97,15 +99,18 @@ env = Environment(tools=['default', TOOL_ADD_HEADER])
 name = ARGUMENTS.get('name', '')
 ver = ARGUMENTS.get('ver', '')
 repo = ARGUMENTS.get('repo', '')
-current_module = get_module(name, ver, repo)
-# if name is '':
+pwd = ARGUMENTS.get('pwd', '')
+path = ''
+if name is '':
+    path = pwd
+    env.Repository(path)
+current_module = get_module(name, ver, repo, path)
 module_build_dir = os.path.join(mmenv.global_env.build_dir, module_to_dir(name, ver))
 print(module_build_dir, current_module.module_path)
 # env.VariantDir(module_build_dir, current_module.module_path, duplicate=0)
 env.SConsignFile(os.path.join(mmenv.global_env.build_dir, ".sconsign.dblite"))
 init_module(current_module)
 
-env.Repository(mmenv.global_env.source_dir)
 lib = build_module(current_module, env)
 env.Default(lib)
 

@@ -69,6 +69,8 @@ if __name__ == "__main__":
     map_argv["-B"] = "build_depends"
     map_argv["s"] = "--tree=all"
     map_argv["sn"] = "--tree=all -n"
+    map_argv["-C"] = "--build-dir"
+    map_argv["--directory"] = "--build-dir"
 
     arch = ""
     for arg in sys.argv:
@@ -83,21 +85,24 @@ if __name__ == "__main__":
 
     for param in map_argv.keys():
         if param in sys.argv:
-            sys.argv.remove(param)
-            sys.argv.append(map_argv[param])
+            index = sys.argv.index(param)
+            sys.argv.pop(index)
+            sys.argv.insert(index, map_argv[param])
 
     env = mmenv.global_env
     build_dir = env.build_dir
 
     try:
-        i = sys.argv.index('-C')
-        if i + 1 == len(sys.argv):
+        param = '--build-dir'
+        index = sys.argv.index(param)
+        if index + 1 == len(sys.argv):
             print("param error")
             sys.exit(1)
-        build_dir = sys.argv[i + 1]
+        build_dir = sys.argv[index + 1]
+        sys.argv.pop(index)
+        sys.argv.pop(index)
     except ValueError:
-        print("param error")
-        sys.exit(1)
+        pass
 
     if not os.path.isdir(build_dir):
         mkdir(build_dir)
