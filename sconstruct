@@ -3,13 +3,12 @@
 
 import os
 
-import mmenv
 import mmmodule
 from mmcommon import *
+from mmenv import global_env
+from mmdebug import mm_debug
 
-global mm_module_arch
-
-mm_module_arch = ARGUMENTS.get('arch', '')
+global_env.set_arch(ARGUMENTS.get('arch', ''))
 
 
 def get_module(name, ver, repo, path=''):
@@ -22,7 +21,6 @@ def init_module(module, name_stack=[]):
     module.init_source()
     module.init_config()
     for (name, ver, repo) in module.module_depend:
-        print("--------------ver", ver)
         dep_module = get_module(name, ver, repo)
         if str(dep_module) in name_stack:
             print("Depend error")
@@ -39,15 +37,26 @@ def build_unittest(module):
     pass
 
 
+def copy_locallibs(module, env):
+    target = []
+    for dir in module.lib_dir:
+        mm_debug(dir)
+        target.append(env.Install(global_env.lib_dir, dir))
+    return target
+
+
 def build_module(module, env):
     module.init_depend()
+
+    local_libs = copy_locallibs(module, env)
+
     source = module.source_list
     source_count = len(source)
     if source_count == 0:
         print("%s source is none." % module.module_name)
-        return
+        print local_libs
+        return local_libs
 
-    print source
     # print(">>>>>>>>>>>>", module.module_name, module.inc_dir)
     # print(">>>>>>>>>>>>", module.module_name, module.dep_inc_dir)
     # print("node = %s name = %s source = %s" % (module_node, name, source))
@@ -56,6 +65,7 @@ def build_module(module, env):
     list_append(list_inc, module.dep_inc_dir)
 
     list_ccflags = []
+    list_append(list_ccflags, global_env.ccflags)
     list_append(list_ccflags, module.ccflags)
     list_append(list_ccflags, module.dep_ccflags)
 
@@ -72,9 +82,12 @@ def build_module(module, env):
     args_dict["CCFLAGS"] = list_ccflags
     args_dict["CXXFLAGS"] = list_cxxflags
     args_dict["LINKFLAGS"] = list_linkflags
-    print(args_dict)
 
-    lib_name = os.path.join(mmenv.global_env.lib_dir, module.module_name)
+    # print source
+    # print(module.cxxflags, module.dep_ccflags)
+    print("%s : %s" % (module.module_name, args_dict))
+
+    lib_name = os.path.join(global_env.lib_dir, module.module_name)
     sharelib = env.SharedLibrary(target=lib_name, source=source, **args_dict)
     staticlib = env.StaticLibrary(target=lib_name, source=source, **args_dict)
 
@@ -84,12 +97,14 @@ def build_module(module, env):
         env.Depends(sharelib, dep_sharelib)
         env.Depends(staticlib, dep_staticlib)
 
+    if len(local_libs) > 0:
+        env.Depends([sharelib, staticlib], local_libs)
     return [sharelib, staticlib]
 
 
 env = Environment(tools=['default', TOOL_ADD_HEADER])
-env.Repository(mmenv.global_env.source_dir)
-# env.VariantDir(mmenv.global_env.build_dir, mmenv.global_env.source_dir, duplicate=0)
+env.Repository(global_env.source_dir)
+# env.VariantDir(global_env.build_dir, global_env.source_dir, duplicate=0)
 # env['CCCOMSTR'] = "Compiling $TARGET"
 # env['CXXCOMSTR'] = "Compiling $TARGET"
 # env['LINKCOMSTR'] = "Linking $TARGET"
@@ -105,10 +120,10 @@ if name is '':
     path = pwd
     env.Repository(os.path.normpath(os.path.join(path, os.path.pardir)))
 current_module = get_module(name, ver, repo, path)
-module_build_dir = os.path.join(mmenv.global_env.build_dir, module_to_dir(name, ver))
+module_build_dir = os.path.join(global_env.build_dir, module_to_dir(name, ver))
 print(module_build_dir, current_module.module_path)
 # env.VariantDir(module_build_dir, current_module.module_path, duplicate=0)
-env.SConsignFile(os.path.join(mmenv.global_env.build_dir, ".sconsign.dblite"))
+env.SConsignFile(os.path.join(global_env.build_dir, ".sconsign.dblite"))
 init_module(current_module)
 
 lib = build_module(current_module, env)

@@ -89,14 +89,21 @@ class MMModule:
         self.module_config = get_module_config(self.module_path)
         self.module_depend = self.module_config.get_depend()
         self.source_info = self.module_config.get_source_info()
-        self.lib_dir = self.module_config.get_lib_dir()
         self.ccflags = self.module_config.get_ccflags()
         self.cxxflags = self.module_config.get_cxxflags()
         self.linkflags = self.module_config.get_linkflags()
+
         inc_dir = self.module_config.get_include_dir()
-        source_list = self.module_config.get_source_list()
+        inc_dir = filter(lambda x: os.path.isdir(os.path.join(self.module_path, x)), inc_dir)
         self.inc_dir = map(lambda x: os.path.join(dir, x), inc_dir)
+
+        source_list = self.module_config.get_source_list()
+        source_list = filter(lambda x: os.path.exists(os.path.join(self.module_path, x)), source_list)
         self.source_list = map(lambda x: os.path.join(dir, x), source_list)
+
+        lib_dir = self.module_config.get_lib_dir()
+        lib_dir = map(lambda x: os.path.join(self.module_path, x), lib_dir)
+        self.lib_dir = filter(lambda x: os.path.isdir(os.path.join(self.module_path, x)), lib_dir)
 
     def init_depend(self):
         self.all_module_depend = []

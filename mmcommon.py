@@ -66,7 +66,7 @@ def find_module_config(path):
     try:
         os.path.walk(path, find_func, None)
     except os.error:
-        print("os.error")
+        print("walk : os.error")
         return modules
     return modules
 
@@ -147,6 +147,8 @@ def find_source(path, suffixlist=MM_SOURCE_SUFFIXES, recursive=False):
     :rtype : list
     """
     source = []
+    if not os.path.isdir(path):
+        return source
 
     def find_func(arg, dirname, names):
         files = [os.path.normpath(os.path.join(dirname, file)) for file in names]
@@ -167,7 +169,7 @@ def find_source(path, suffixlist=MM_SOURCE_SUFFIXES, recursive=False):
             names = os.listdir(path)
             find_func(None, path, names)
         except os.error:
-            print("os.error")
+            print("listdir : os.error")
             return source
     return source
 

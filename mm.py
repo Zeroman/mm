@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
     arch = ""
     for arg in sys.argv:
-        if arg.startswith("arch="):
+        if arg.startswith("tttttgg"):
             arch = arg[5:]
             sys.argv.remove(arg)
             break

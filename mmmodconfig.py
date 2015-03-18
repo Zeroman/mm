@@ -14,11 +14,8 @@ DEFAULT_UNITTEST_DIR = "test/unit"
 
 
 class MMModConfig:
-    def __init__(self, module_src, arch=''):
+    def __init__(self, module_src):
         self.__module_src = module_src
-        self.__module_arch = arch
-        if arch == '':
-            self.__module_arch = default_arch()
         self.__config = mmconfig.MMConfig()
         config_path = os.path.join(module_src, MM_CONFIG)
         self.__config.read_config(config_path)
@@ -31,12 +28,17 @@ class MMModConfig:
 
     def get_source_info(self):
         dir = self.__get_split_value("module.src", DEFAULT_SRC_DIR)
-        return dir
-
+        node = join_node("module.src", mmenv.global_env.arch)
+        def_value = os.path.join(DEFAULT_SRC_DIR, mmenv.global_env.arch)
+        dir_arch = self.__get_split_value(node, def_value)
+        return dir + dir_arch
 
     def get_include_dir(self):
         dir = self.__get_split_value("module.inc_dir", DEFAULT_INC_DIR)
-        return dir
+        node = join_node("module.inc_src", mmenv.global_env.arch)
+        def_value = os.path.join(DEFAULT_INC_DIR, mmenv.global_env.arch)
+        dir_arch = self.__get_split_value(node, def_value)
+        return dir + dir_arch
 
     def get_example_dir(self):
         dir = self.__get_split_value("module.example_dir", DEFAULT_EXAMPLE_DIR)
@@ -51,20 +53,26 @@ class MMModConfig:
         return dir
 
     def get_lib_dir(self):
-        dir = self.__get_split_value("module.lib_dir")
-        return dir
+        dir = self.__get_split_value("module.lib_dir", DEFAULT_LIB_DIR)
+        return map(lambda x: os.path.join(x, mmenv.global_env.arch), dir)
 
     def get_ccflags(self):
         dir = self.__get_split_value("module.ccflags")
-        return dir
+        node = join_node("module.ccflags", mmenv.global_env.arch)
+        dir_arch = self.__get_split_value(node)
+        return dir + dir_arch
 
     def get_cxxflags(self):
         dir = self.__get_split_value("module.cxxflags")
-        return dir
+        node = join_node("module.cxxflags", mmenv.global_env.arch)
+        dir_arch = self.__get_split_value(node)
+        return dir + dir_arch
 
     def get_linkflags(self):
         dir = self.__get_split_value("module.linkflags")
-        return dir
+        node = join_node("module.linkflags", mmenv.global_env.arch)
+        dir_arch = self.__get_split_value(node)
+        return dir + dir_arch
 
     def get_depend(self):
         depend = []
@@ -77,7 +85,7 @@ class MMModConfig:
                 depend.append((name, ver, repo))
 
         __get_depends("module.depend")
-        __get_depends(join_node("module.depend", self.__module_arch))
+        __get_depends(join_node("module.depend", mmenv.global_env.arch))
         return depend
 
     def get_source_list(self):

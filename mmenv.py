@@ -10,6 +10,7 @@ import mmrepo
 class MMEnv:
     def __init__(self):
         self.__config_path = []
+        self.arch = mmcommon.default_arch()
 
         self.mm_path = os.path.dirname(os.path.realpath(__file__))
         self.build_module_script = os.path.join(self.mm_path, "build_module.py")
@@ -52,16 +53,17 @@ class MMEnv:
             assert os.path.isdir(url)
             self.__repo_objs.append(mmrepo.MMSingleRepo(repo, url))
 
-        mm_lib_path = os.getenv('MM_LIB_PATH')
+        mm_lib_path = os.getenv('MM_ENV_LIB_PATH')
         if mm_lib_path is not None:
             self.__config.set_value("env.lib_dir", mm_lib_path)
             self.lib_dir = mm_lib_path
 
-        mm_repo_path = os.getenv('MM_REPO_LOCAL_PATH')
-        if mm_repo_path is not None:
-            self.__config.set_value("repo.dir.env.url", mm_repo_path)
-            assert os.path.isdir(mm_repo_path)
-            self.__repo_objs.append(mmrepo.MMDirRepo('env', mm_repo_path))
+        (repo, name, url) = os.getenv('MM_ENV_REPO').split(":")
+        if name is not None:
+            node = mmcommon.join_node("repo.dir", name, url)
+            self.__config.set_value(node, url)
+            assert os.path.isdir(url)
+            self.__repo_objs.append(mmrepo.MMDirRepo(name, url))
 
 
     def set_arch(self, arch):

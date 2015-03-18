@@ -206,6 +206,7 @@ if __name__ == "__main__":
     # mm.read_config("mm_1.ini")
     # mm.read_config("mm_2.ini")
     mm.read_config("mm.cfg")
+    mm.show()
 
     mm = MMConfig()
     mm.set_value("set.s", 1)
