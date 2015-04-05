@@ -50,7 +50,8 @@ def build_module(module, env):
 
     local_libs = copy_locallibs(module, env)
 
-    source = module.source_list
+    source = get_source_list(module.source_info, module.module_path, global_env.src_suffixes)
+    print source
     source_count = len(source)
     if source_count == 0:
         print("%s source is none." % module.module_name)
@@ -62,6 +63,8 @@ def build_module(module, env):
     # print("node = %s name = %s source = %s" % (module_node, name, source))
     list_inc = []
     list_append(list_inc, module.inc_dir)
+    list_append(list_inc, module.source_dir)
+    list_append(list_inc, module.source_inc_dir)
     list_append(list_inc, module.dep_inc_dir)
 
     list_ccflags = []
@@ -102,13 +105,69 @@ def build_module(module, env):
     return [sharelib, staticlib]
 
 
+def build_functest(module, env):
+    source = get_source_list(["dir:func_test"], module.module_path, global_env.src_suffixes)
+    source_count = len(source)
+    if source_count == 0:
+        print("%s source is none." % module.module_name)
+        return []
+
+    list_inc = []
+    list_append(list_inc, module.inc_dir)
+    list_append(list_inc, module.source_dir)
+    list_append(list_inc, module.source_inc_dir)
+    list_append(list_inc, module.dep_inc_dir)
+
+    list_ccflags = []
+    list_append(list_ccflags, global_env.ccflags)
+    list_append(list_ccflags, module.ccflags)
+    list_append(list_ccflags, module.dep_ccflags)
+    inc_dir = module.inc_dir
+    for dir in inc_dir:
+        inc_file = module.module_name + '.h'
+        inc_file = env.FindFile(inc_file, dir)
+        if inc_file is not None:
+            list_append(list_ccflags, ["-include", str(inc_file)])
+
+    list_cxxflags = []
+    list_append(list_cxxflags, module.cxxflags)
+    list_append(list_cxxflags, module.dep_cxxflags)
+
+    list_linkflags = []
+    list_append(list_linkflags, module.linkflags)
+    list_append(list_linkflags, module.dep_linkflags)
+
+    list_libs = []
+    for (name, ver, repo) in module.all_module_depend:
+        list_append(list_libs, name)
+    list_append(list_libs, module.module_name)
+
+    args_dict = {}
+    args_dict["LIBS"] = list_libs
+    args_dict["CPPPATH"] = list_inc
+    args_dict["LIBPATH"] = global_env.lib_dir
+    args_dict["CCFLAGS"] = list_ccflags
+    args_dict["CXXFLAGS"] = list_cxxflags
+    args_dict["LINKFLAGS"] = list_linkflags
+
+    # print source
+    # print(module.cxxflags, module.dep_ccflags)
+    print("%s : %s" % (module.module_name, args_dict))
+
+    dst = []
+    for src in source:
+        dst_bin = env.Program(source=src, **args_dict)
+        dst.append(dst_bin)
+    return dst
+
+
 env = Environment(tools=['default', TOOL_ADD_HEADER])
+env['STATIC_AND_SHARED_OBJECTS_ARE_THE_SAME'] = 1
 env.Repository(global_env.source_dir)
-# env.VariantDir(global_env.build_dir, global_env.source_dir, duplicate=0)
+env.VariantDir(global_env.build_dir, global_env.source_dir, duplicate=0)
 # env['CCCOMSTR'] = "Compiling $TARGET"
 # env['CXXCOMSTR'] = "Compiling $TARGET"
 # env['LINKCOMSTR'] = "Linking $TARGET"
-# env['STATIC_AND_SHARED_OBJECTS_ARE_THE_SAME']=1
 # Export('env')
 
 name = ARGUMENTS.get('name', '')
@@ -122,12 +181,13 @@ if name is '':
 current_module = get_module(name, ver, repo, path)
 module_build_dir = os.path.join(global_env.build_dir, module_to_dir(name, ver))
 print(module_build_dir, current_module.module_path)
-# env.VariantDir(module_build_dir, current_module.module_path, duplicate=0)
 env.SConsignFile(os.path.join(global_env.build_dir, ".sconsign.dblite"))
 init_module(current_module)
 
 lib = build_module(current_module, env)
 env.Default(lib)
+functest = build_functest(current_module, env)
+env.Default(functest)
 
 if False:
     # platform = ARGUMENTS.get('config', Platform())

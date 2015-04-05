@@ -23,6 +23,8 @@ class MMEnv:
         self.scons_script = os.path.join(self.mm_path, "sconstruct")
         # self.scons_param = self.__add_cmd_param(self.scons_param, "-Q ")
 
+        self.ccflags = self.__config.get_split_value("env.ccflags")
+
         self.__config_path.append(os.path.realpath(os.getcwd()))
         self.__config_path.append(os.path.realpath(os.path.expandvars('$HOME')))
         self.__config_path.append(os.path.realpath(self.mm_path))
@@ -58,8 +60,9 @@ class MMEnv:
             self.__config.set_value("env.lib_dir", mm_lib_path)
             self.lib_dir = mm_lib_path
 
-        (repo, name, url) = os.getenv('MM_ENV_REPO').split(":")
-        if name is not None:
+        mm_env_repo = os.getenv('MM_ENV_REPO')
+        if mm_env_repo is not None:
+            (repo, name, url) = mm_env_repo.split(":")
             node = mmcommon.join_node("repo.dir", name, url)
             self.__config.set_value(node, url)
             assert os.path.isdir(url)

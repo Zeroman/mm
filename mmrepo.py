@@ -35,14 +35,16 @@ def mm_module_copy(module_path, dest_path):
     print("pull module path is " + dest_path)
     mm_cfg = os.path.join(module_path, mmcommon.MM_CONFIG)
     mmcommon.copy_file(mm_cfg, os.path.join(dest_path, mmcommon.MM_CONFIG))
-    sources = module_config.get_source_list()
-    print sources,"----------------------------"
-    for src in sources:
-        mmcommon.copy_file(os.path.join(module_path, src), os.path.join(dest_path, src))
+    # sources = module_config.get_source_list()
+    # for src in sources:
+    # mmcommon.copy_file(os.path.join(module_path, src), os.path.join(dest_path, src))
+    src_dir = module_config.get_source_dir()
+    for dir in src_dir:
+        mmcommon.copy_dir(os.path.join(module_path, dir), dest_path, recursive=True)
     # print("pull " + src_dir)
     inc_dir_list = module_config.get_include_dir()
     for dir in inc_dir_list:
-        mmcommon.copy_dir(os.path.join(module_path, dir), dest_path)
+        mmcommon.copy_dir(os.path.join(module_path, dir), dest_path, recursive=True)
     lib_dir_list = module_config.get_lib_dir()
     for dir in lib_dir_list:
         mmcommon.copy_dir(os.path.join(module_path, dir), dest_path)

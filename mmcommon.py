@@ -88,6 +88,7 @@ def copy_file(src, dest, symlinks=False):
 
 
 def copy_dir(src, dest, recursive=False, symlinks=False):
+    print("copy %s >> %s" % (src, dest))
     if not os.path.isdir(src):
         print(src + " is not dir, skip.")
         return
@@ -112,6 +113,50 @@ def copy_dir(src, dest, recursive=False, symlinks=False):
     if not os.path.exists(dest):
         os.makedirs(dest)
     copyItems(src, dest)
+
+
+def get_source_list(source_info, module_dir, suffixes):
+    def __get_source_list(src_type, src_param):
+        sources = []
+        # str_len = len(module_dir)
+        # if module_dir is not '/':
+        # str_len += 1
+        # sources = map(lambda x: x[str_len:], sources)
+        if src_type == 'rec':
+            dir = os.path.join(module_dir, src_param)
+            sources = find_source(dir, suffixes, recursive=True)
+        elif src_type == 'dir':
+            dir = os.path.join(module_dir, src_param)
+            sources = find_source(dir, suffixes)
+        elif src_type == 'file':
+            sources = [src_param]
+        # print sources
+        # print("node = %s name = %s source = %s" % (module_node, name, source))
+        return sources
+
+    source = []
+    for info in source_info:
+        src_type = "dir"
+        src_param = ""
+        temp = split_value(info, ':')
+        if len(temp) == 2:
+            (src_type, src_param) = temp
+        else:
+            src_param = temp[0]
+        if src_param is not "":
+            source += __get_source_list(src_type, src_param)
+    return source
+
+
+def filter_path_list_prefix(src_path_list, prefix):
+    sources = []
+    if prefix[-1] is not os.path.pathsep:
+        prefix += os.path.pathsep
+    str_len = len(prefix)
+    for src in src_path_list:
+        if src.startwith(prefix):
+            sources.append(src[str_len:])
+    return sources
 
 
 def create_file(path, info=""):

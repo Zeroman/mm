@@ -97,6 +97,14 @@ class MMModule:
         inc_dir = filter(lambda x: os.path.isdir(os.path.join(self.module_path, x)), inc_dir)
         self.inc_dir = map(lambda x: os.path.join(dir, x), inc_dir)
 
+        source_dir = self.module_config.get_source_dir()
+        source_dir = filter(lambda x: os.path.isdir(os.path.join(self.module_path, x)), source_dir)
+        self.source_dir = map(lambda x: os.path.join(dir, x), source_dir)
+
+        source_inc_dir = self.module_config.get_source_include_dir()
+        source_inc_dir = filter(lambda x: os.path.isdir(os.path.join(self.module_path, x)), source_inc_dir)
+        self.source_inc_dir = map(lambda x: os.path.join(dir, x), source_inc_dir)
+
         source_list = self.module_config.get_source_list()
         source_list = filter(lambda x: os.path.exists(os.path.join(self.module_path, x)), source_list)
         self.source_list = map(lambda x: os.path.join(dir, x), source_list)

@@ -5,8 +5,8 @@ from mmcommon import *
 import mmconfig
 import mmenv
 
-DEFAULT_SRC_DIR = "dir:src"
 DEFAULT_INC_DIR = "include"
+DEFAULT_SRC_DIR = "src"
 DEFAULT_LIB_DIR = "lib"
 DEFAULT_EXAMPLE_DIR = "example"
 DEFAULT_TEST_DIR = "test"
@@ -33,9 +33,14 @@ class MMModConfig:
         dir_arch = self.__get_split_value(node, def_value)
         return dir + dir_arch
 
+    def get_source_include_dir(self):
+        dir = self.__get_split_value("module.src.inc_dir", DEFAULT_INC_DIR)
+        return dir
+
+
     def get_include_dir(self):
         dir = self.__get_split_value("module.inc_dir", DEFAULT_INC_DIR)
-        node = join_node("module.inc_src", mmenv.global_env.arch)
+        node = join_node("module.inc_dir", mmenv.global_env.arch)
         def_value = os.path.join(DEFAULT_INC_DIR, mmenv.global_env.arch)
         dir_arch = self.__get_split_value(node, def_value)
         return dir + dir_arch
@@ -87,6 +92,20 @@ class MMModConfig:
         __get_depends("module.depend")
         __get_depends(join_node("module.depend", mmenv.global_env.arch))
         return depend
+
+    def get_source_dir(self):
+        dir = []
+        for info in self.get_source_info():
+            src_type = "dir"
+            src_param = ""
+            temp = split_value(info, ':')
+            if len(temp) == 2:
+                (src_type, src_param) = temp
+            else:
+                src_param = temp[0]
+            if src_type is not 'file':
+                dir.append(src_param)
+        return dir
 
     def get_source_list(self):
         source = []
