@@ -117,7 +117,7 @@ class MMModule:
         self.all_module_depend = []
         self.__all_depends_dict = {}
         self.__proc_depends()
-        for (name, ver, repo) in self.all_module_depend[1:]:
+        for (name, ver, repo) in self.all_module_depend[0:]:
             path = os.path.join(mmenv.global_env.source_dir, module_to_dir(name, ver))
             module_config = get_module_config(path)
             dir = module_to_dir(name, ver)

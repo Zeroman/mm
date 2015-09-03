@@ -44,6 +44,24 @@ def copy_locallibs(module, env):
         target.append(env.Install(global_env.lib_dir, dir))
     return target
 
+def init_arch(env):
+    env_cc = global_env.get_arch_env("CC")
+    if env_cc is not None:
+        env['CC'] = env_cc
+    env_cxx = global_env.get_arch_env("CXX")
+    if env_cxx is not None:
+        env['CXX'] = env_cxx
+    env_ccflags = global_env.get_arch_env("CCFLAGS")
+    if env_ccflags is not None:
+        env.Append(CCFLAGS=env_ccflags)
+    env_cxxflags = global_env.get_arch_env("CXXFLAGS")
+    if env_cxxflags is not None:
+        env.Append(CXXFLAGS=env_cxxflags)
+    env_linkflags = global_env.get_arch_env("LINKFLAGS")
+    if env_linkflags is not None:
+        env.Append(LINKFLAGS=env_linkflags)
+    print(env['CC'])
+    print(env['CXX'])
 
 def build_module(module, env):
     module.init_depend()
@@ -51,7 +69,7 @@ def build_module(module, env):
     local_libs = copy_locallibs(module, env)
 
     source = get_source_list(module.source_info, module.module_path, global_env.src_suffixes)
-    print source
+    # print source
     source_count = len(source)
     if source_count == 0:
         print("%s source is none." % module.module_name)
@@ -59,7 +77,7 @@ def build_module(module, env):
         return local_libs
 
     # print(">>>>>>>>>>>>", module.module_name, module.inc_dir)
-    # print(">>>>>>>>>>>>", module.module_name, module.dep_inc_dir)
+    print(">>>>>>>>>>>>", module.module_name, module.dep_inc_dir)
     # print("node = %s name = %s source = %s" % (module_node, name, source))
     list_inc = []
     list_append(list_inc, module.inc_dir)
@@ -160,6 +178,17 @@ def build_functest(module, env):
         dst.append(dst_bin)
     return dst
 
+def packall(module, env):
+    zip_dir = os.path.join(global_env.build_dir, module.module_name, "zip")
+    self.env.Accumulate(zip_dir, module.inc_dir)
+    self.env.Accumulate(zip_dir, module.dep_inc_dir)
+    # zip_libdir = os.path.join(zip_dir, "lib")
+    # self.env.Accumulate(zip_libdir, module.local_libs)
+    # self.env.Accumulate(zip_libdir, self.depend_lib_files)
+    # self.env.Accumulate(zip_libdir, module.local_libs)
+    zip_path = os.path.join(self.build_dir, self.module_name + "_all")
+    zipall = self.env.Zipper(zip_path, zip_dir)
+    return zipall
 
 env = Environment(tools=['default', TOOL_ADD_HEADER])
 env['STATIC_AND_SHARED_OBJECTS_ARE_THE_SAME'] = 1
@@ -184,10 +213,13 @@ print(module_build_dir, current_module.module_path)
 env.SConsignFile(os.path.join(global_env.build_dir, ".sconsign.dblite"))
 init_module(current_module)
 
+init_arch(env)
 lib = build_module(current_module, env)
 env.Default(lib)
 functest = build_functest(current_module, env)
 env.Default(functest)
+
+env.Alias('pack', packall)
 
 if False:
     # platform = ARGUMENTS.get('config', Platform())

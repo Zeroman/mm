@@ -177,13 +177,17 @@ def read_file(path):
 
 
 def list_append(src_list, item):
+    def __append(list_value, item_value):
+        if list_value.count(item_value) == 0:
+            list_value.append(item_value)
+
     if item is None:
         return
     if isinstance(item, tuple) or isinstance(item, list):
         for value in item:
-            src_list.append(value)
+            __append(src_list, value)
     else:
-        src_list.append(item)
+        __append(src_list, value)
 
 
 def find_source(path, suffixlist=MM_SOURCE_SUFFIXES, recursive=False):

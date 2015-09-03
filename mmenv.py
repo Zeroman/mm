@@ -68,11 +68,14 @@ class MMEnv:
             assert os.path.isdir(url)
             self.__repo_objs.append(mmrepo.MMDirRepo(name, url))
 
+    def get_arch_env(self, node):
+        return self.__config.get_value(mmcommon.join_node("arch", self.arch, node))
 
     def set_arch(self, arch):
         self.arch = arch
         if arch == '':
             self.arch = mmcommon.default_arch()
+        self.lib_dir = os.path.join(self.lib_dir, self.arch)
 
     def __add_cmd_param(self, param, add_param):
         return param + " " + add_param + " "

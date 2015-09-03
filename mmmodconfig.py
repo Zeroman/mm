@@ -37,7 +37,6 @@ class MMModConfig:
         dir = self.__get_split_value("module.src.inc_dir", DEFAULT_INC_DIR)
         return dir
 
-
     def get_include_dir(self):
         dir = self.__get_split_value("module.inc_dir", DEFAULT_INC_DIR)
         node = join_node("module.inc_dir", mmenv.global_env.arch)
